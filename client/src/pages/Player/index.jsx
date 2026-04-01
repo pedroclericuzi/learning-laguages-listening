@@ -65,6 +65,38 @@ export default function Player() {
   const isMountedRef = useRef(true)
   useEffect(() => () => { isMountedRef.current = false }, [])
 
+  // Callback ref: chamado quando o <div> monta/desmonta no DOM
+  // Isso corrige a race condition onde o useEffect rodava antes do div existir
+  const setEmbedDiv = useCallback((node) => {
+    embedDivRef.current = node
+    if (!node || !song || playerMode !== 'spotify') return
+    const api = window._spotifyIframeApi
+    if (api) {
+      createSpotifyController(api, node, song.id)
+    }
+  }, [song, playerMode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  function createSpotifyController(api, container, trackId) {
+    // Evita criar controller duplicado se já existe um para esta faixa
+    if (embedControllerRef.current) return
+    api.createController(
+      container,
+      { uri: `spotify:track:${trackId}` },
+      (controller) => {
+        embedControllerRef.current = controller
+        controller.addListener('playbackUpdate', (e) => {
+          if (!isMountedRef.current) return
+          // A API pode passar o objeto direto ou envolto em { data }
+          const d = e?.data ?? e
+          if (!d) return
+          setCurrentTime(d.position / 1000)
+          setDuration(d.duration / 1000)
+          setIsPlaying(!d.isPaused)
+        })
+      }
+    )
+  }
+
   // 1. Buscar dados da música (Spotify)
   function loadSong() {
     setLoading(true)
@@ -102,44 +134,22 @@ export default function Player() {
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Spotify iFrame API ─────────────────────────────────────────────────────
-  // Inicializa o EmbedController e escuta playbackUpdate para obter currentTime
-  function initEmbedController(api) {
-    if (!embedDivRef.current || !song) return
-    // Destruir controller anterior se existir
-    embedControllerRef.current = null
-    api.createController(
-      embedDivRef.current,
-      { uri: `spotify:track:${song.id}` },
-      (controller) => {
-        embedControllerRef.current = controller
-        controller.addListener('playbackUpdate', ({ data }) => {
-          if (!data || !isMountedRef.current) return
-          setCurrentTime(data.position / 1000)   // ms → s
-          setDuration(data.duration / 1000)
-          setIsPlaying(!data.isPaused)
-        })
-      }
-    )
-  }
-
+  // Carrega o script uma única vez e guarda a API em window._spotifyIframeApi
   useEffect(() => {
-    if (playerMode !== 'spotify' || !song) return
-    // Se o controller já existe, apenas muda a faixa
-    if (embedControllerRef.current) {
-      embedControllerRef.current.loadUri(`spotify:track:${song.id}`)
-      return
-    }
-    // Se a API já foi carregada anteriormente
+    if (playerMode !== 'spotify') return
     if (window._spotifyIframeApi) {
-      initEmbedController(window._spotifyIframeApi)
+      // API já disponível: se o div já existir, inicializa imediatamente
+      if (embedDivRef.current && song) {
+        createSpotifyController(window._spotifyIframeApi, embedDivRef.current, song.id)
+      }
       return
     }
-    // Configura callback para quando a API carregar
     window.onSpotifyIframeApiReady = (IFrameAPI) => {
       window._spotifyIframeApi = IFrameAPI
-      if (isMountedRef.current) initEmbedController(IFrameAPI)
+      if (isMountedRef.current && embedDivRef.current && song) {
+        createSpotifyController(IFrameAPI, embedDivRef.current, song.id)
+      }
     }
-    // Injeta o script uma única vez
     if (!document.querySelector('script[src*="spotify.com/embed/iframe-api"]')) {
       const script = document.createElement('script')
       script.src = 'https://open.spotify.com/embed/iframe-api/v1'
@@ -148,10 +158,15 @@ export default function Player() {
     }
   }, [song, playerMode]) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Invalida controller quando sai do modo Spotify
+  // Invalida controller quando sai do modo Spotify ou troca de música
   useEffect(() => {
     if (playerMode !== 'spotify') embedControllerRef.current = null
   }, [playerMode])
+
+  useEffect(() => {
+    // Nova música: limpa controller para forçar recriação
+    embedControllerRef.current = null
+  }, [song?.id])
 
   // 2. Buscar letras + tradução (LRCLIB + Google Translate)
   useEffect(() => {
@@ -521,7 +536,7 @@ export default function Player() {
           </div>
 
           <div className="player__spotify-widget">
-            <div ref={embedDivRef} className="player__spotify-embed" />
+            <div ref={setEmbedDiv} className="player__spotify-embed" />
           </div>
 
           <p className="player__spotify-hint">

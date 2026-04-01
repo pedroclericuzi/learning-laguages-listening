@@ -409,7 +409,6 @@
   height: 152px;
   border-radius: 12px;
   overflow: hidden;
-  background: #000;
 }
 
 .player__spotify-embed iframe {
