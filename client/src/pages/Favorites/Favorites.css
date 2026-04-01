@@ -1,0 +1,36 @@
+.favorites {
+  padding-bottom: 2rem;
+}
+
+.favorites__title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+}
+
+.favorites__grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.favorites__empty {
+  text-align: center;
+  padding: 4rem 2rem;
+}
+
+.favorites__empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.favorites__empty-text {
+  color: var(--color-text-secondary);
+  font-size: 0.95rem;
+  margin-bottom: 0.5rem;
+}
+
+.favorites__empty-hint {
+  color: var(--color-text-muted);
+  font-size: 0.8rem;
+}

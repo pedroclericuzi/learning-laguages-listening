@@ -1,0 +1,136 @@
+.layout {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  background: var(--color-bg-card);
+  border-right: 1px solid var(--color-border);
+  padding: 1.5rem 0;
+  display: flex;
+  flex-direction: column;
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  z-index: 10;
+}
+
+.sidebar__logo {
+  font-size: 1.75rem;
+  font-weight: 800;
+  text-align: center;
+  padding: 0 1.5rem 1.5rem;
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-accent) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.sidebar__nav {
+  flex: 1;
+  padding: 1rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sidebar__link {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  text-decoration: none;
+}
+
+.sidebar__link:hover {
+  background: var(--color-bg-elevated);
+  color: var(--color-text);
+}
+
+.sidebar__link--active {
+  background: rgba(108, 99, 255, 0.12);
+  color: var(--color-primary);
+}
+
+.sidebar__link-icon {
+  font-size: 1.25rem;
+  display: flex;
+  align-items: center;
+}
+
+.sidebar__footer {
+  padding: 1rem 0.75rem;
+  border-top: 1px solid var(--color-border);
+}
+
+.layout__content {
+  flex: 1;
+  margin-left: 240px;
+  padding: 2rem;
+  max-width: 1200px;
+}
+
+/* Mobile nav */
+.mobile-nav {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--color-bg-card);
+  border-top: 1px solid var(--color-border);
+  padding: 0.5rem;
+  z-index: 10;
+}
+
+.mobile-nav__inner {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+}
+
+.mobile-nav__link {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  padding: 0.5rem;
+  color: var(--color-text-muted);
+  font-size: 0.65rem;
+  font-weight: 500;
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+  transition: color 0.2s;
+}
+
+.mobile-nav__link--active {
+  color: var(--color-primary);
+}
+
+.mobile-nav__link-icon {
+  font-size: 1.4rem;
+  display: flex;
+}
+
+@media (max-width: 768px) {
+  .sidebar {
+    display: none;
+  }
+
+  .layout__content {
+    margin-left: 0;
+    padding: 1.5rem 1rem 5rem;
+  }
+
+  .mobile-nav {
+    display: block;
+  }
+}

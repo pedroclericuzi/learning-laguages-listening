@@ -1,0 +1,96 @@
+.song-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.song-card:hover {
+  border-color: var(--color-primary);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(108, 99, 255, 0.1);
+}
+
+.song-card__cover {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--color-bg-elevated);
+  flex-shrink: 0;
+}
+
+.song-card__info {
+  flex: 1;
+  min-width: 0;
+}
+
+.song-card__title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.song-card__artist {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  margin-top: 0.15rem;
+}
+
+.song-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.35rem;
+}
+
+.song-card__badge {
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 0.15rem 0.5rem;
+  border-radius: var(--radius-full);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.song-card__badge--beginner {
+  background: rgba(78, 205, 196, 0.15);
+  color: var(--color-accent);
+}
+
+.song-card__badge--intermediate {
+  background: rgba(255, 230, 109, 0.15);
+  color: var(--color-warning);
+}
+
+.song-card__badge--advanced {
+  background: rgba(255, 107, 107, 0.15);
+  color: var(--color-secondary);
+}
+
+.song-card__fav {
+  background: none;
+  border: none;
+  font-size: 1.25rem;
+  color: var(--color-text-muted);
+  padding: 0.5rem;
+  display: flex;
+  align-items: center;
+  transition: color 0.2s;
+  flex-shrink: 0;
+}
+
+.song-card__fav:hover {
+  color: var(--color-secondary);
+}
+
+.song-card__fav--active {
+  color: var(--color-secondary);
+}
