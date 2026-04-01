@@ -22,12 +22,8 @@ export default function LanguageSwitcher({ compact = false }) {
 
   function handleTargetChange(e) {
     const code = e.target.value
-    if (code === nativeLanguage) return // não pode ser igual ao idioma nativo
+    if (code === nativeLanguage) return
     setTargetLanguage(code)
-  }
-
-  function flagOf(code) {
-    return languages.find((l) => l.code === code)?.flag || '🌍'
   }
 
   if (compact) {
@@ -36,7 +32,6 @@ export default function LanguageSwitcher({ compact = false }) {
       <div className="lang-switcher lang-switcher--compact">
         <FiGlobe className="lang-switcher__icon" />
         <div className="lang-switcher__select-wrap">
-          <span className="lang-switcher__flag">{flagOf(nativeLanguage)}</span>
           <select
             className="lang-switcher__select"
             value={nativeLanguage || ''}
@@ -53,7 +48,6 @@ export default function LanguageSwitcher({ compact = false }) {
         </div>
         <span className="lang-switcher__arrow">→</span>
         <div className="lang-switcher__select-wrap">
-          <span className="lang-switcher__flag">{flagOf(targetLanguage)}</span>
           <select
             className="lang-switcher__select"
             value={targetLanguage || ''}
@@ -82,7 +76,6 @@ export default function LanguageSwitcher({ compact = false }) {
       <div className="lang-switcher__row">
         <span className="lang-switcher__label">Falo</span>
         <div className="lang-switcher__select-wrap">
-          <span className="lang-switcher__flag">{flagOf(nativeLanguage)}</span>
           <select
             className="lang-switcher__select"
             value={nativeLanguage || ''}
@@ -101,7 +94,6 @@ export default function LanguageSwitcher({ compact = false }) {
       <div className="lang-switcher__row">
         <span className="lang-switcher__label">Aprendo</span>
         <div className="lang-switcher__select-wrap">
-          <span className="lang-switcher__flag">{flagOf(targetLanguage)}</span>
           <select
             className="lang-switcher__select"
             value={targetLanguage || ''}
