@@ -67,7 +67,7 @@
 }
 
 .sidebar__footer {
-  padding: 1rem 0.75rem;
+  padding: 0.75rem 0;
   border-top: 1px solid var(--color-border);
 }
 
@@ -89,6 +89,11 @@
   border-top: 1px solid var(--color-border);
   padding: 0.5rem;
   z-index: 10;
+}
+
+.mobile-lang-bar {
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg-card);
 }
 
 .mobile-nav__inner {
@@ -127,7 +132,7 @@
 
   .layout__content {
     margin-left: 0;
-    padding: 1.5rem 1rem 5rem;
+    padding: 1.5rem 1rem 8rem;
   }
 
   .mobile-nav {

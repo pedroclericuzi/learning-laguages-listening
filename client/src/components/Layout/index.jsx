@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
 import { FiHome, FiHeart, FiSettings, FiMusic, FiBookOpen, FiBarChart2 } from 'react-icons/fi'
+import LanguageSwitcher from './LanguageSwitcher'
 import './Layout.css'
 
 const navItems = [
@@ -36,6 +37,9 @@ export default function Layout() {
             </NavLink>
           ))}
         </nav>
+        <div className="sidebar__footer">
+          <LanguageSwitcher />
+        </div>
       </aside>
 
       {/* Conteúdo principal */}
@@ -45,6 +49,9 @@ export default function Layout() {
 
       {/* Bottom nav - Mobile */}
       <nav className="mobile-nav">
+        <div className="mobile-lang-bar">
+          <LanguageSwitcher compact />
+        </div>
         <div className="mobile-nav__inner">
           {navItems.map((item) => {
             const isActive =
