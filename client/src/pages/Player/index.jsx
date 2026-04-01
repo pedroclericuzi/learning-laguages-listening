@@ -127,8 +127,11 @@ export default function Player() {
       const answers = quizAnswersRef.current
       const answered = Object.keys(answers).length
       const correct = Object.values(answers).filter((a) => a.correct).length
+      const wrongs = Object.values(answers)
+        .filter((a) => !a.correct)
+        .map((a) => ({ text: a.text, selected: a.selected, answer: a.answer }))
       if (answered > 0) {
-        saveSongResult(id, songTitleRef.current || id, correct, answered)
+        saveSongResult(id, songTitleRef.current || id, correct, answered, wrongs)
       }
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -349,7 +352,13 @@ export default function Player() {
     const correct = selected === blank.answer
     setQuizAnswers((prev) => ({
       ...prev,
-      [lineIndex]: { answered: true, correct, selected },
+      [lineIndex]: {
+        answered: true,
+        correct,
+        selected,
+        answer: blank.answer,
+        text: lyrics[lineIndex]?.text || '',
+      },
     }))
 
     if (quizPaused) {

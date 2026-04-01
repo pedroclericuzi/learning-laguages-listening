@@ -25,7 +25,7 @@ const ReportContext = createContext(null)
 export function ReportProvider({ children }) {
   const [report, setReport] = useState(loadFromStorage)
 
-  const saveStoryResult = useCallback((id, title, correct, total) => {
+  const saveStoryResult = useCallback((id, title, correct, total, wrongs = []) => {
     if (total === 0) return
     setReport((prev) => {
       const entry = {
@@ -35,17 +35,18 @@ export function ReportProvider({ children }) {
         correct,
         total,
         percentage: Math.round((correct / total) * 100),
+        wrongs, // [{ text, selected, answer }]
       }
       const updated = {
         ...prev,
-        stories: [entry, ...prev.stories].slice(0, 200), // keep last 200
+        stories: [entry, ...prev.stories].slice(0, 200),
       }
       saveToStorage(updated)
       return updated
     })
   }, [])
 
-  const saveSongResult = useCallback((id, title, correct, total) => {
+  const saveSongResult = useCallback((id, title, correct, total, wrongs = []) => {
     if (total === 0) return
     setReport((prev) => {
       const entry = {
@@ -55,6 +56,7 @@ export function ReportProvider({ children }) {
         correct,
         total,
         percentage: Math.round((correct / total) * 100),
+        wrongs, // [{ text, selected, answer }]
       }
       const updated = {
         ...prev,

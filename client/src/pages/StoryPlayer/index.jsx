@@ -67,9 +67,12 @@ export default function StoryPlayer() {
       const total = quizTotalRef.current
       const answered = Object.keys(answers).length
       const correct = Object.values(answers).filter((a) => a.correct).length
+      const wrongs = Object.values(answers)
+        .filter((a) => !a.correct)
+        .map((a) => ({ text: a.text, selected: a.selected, answer: a.answer }))
       const title = contentRef.current?.title || id
       if (answered > 0) {
-        saveStoryResult(id, title, correct, answered)
+        saveStoryResult(id, title, correct, answered, wrongs)
       }
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -295,7 +298,13 @@ export default function StoryPlayer() {
     const correct = selected === blank.answer
     setQuizAnswers((prev) => ({
       ...prev,
-      [lineIndex]: { answered: true, correct, selected },
+      [lineIndex]: {
+        answered: true,
+        correct,
+        selected,
+        answer: blank.answer,
+        text: lines[lineIndex]?.text || '',
+      },
     }))
 
     // Retomar áudio após responder (com pequeno delay para ver o feedback)

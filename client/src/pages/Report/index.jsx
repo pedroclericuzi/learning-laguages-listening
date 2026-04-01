@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FiBarChart2, FiBookOpen, FiMusic, FiTrash2, FiArrowLeft } from 'react-icons/fi'
+import { FiBarChart2, FiBookOpen, FiMusic, FiTrash2, FiArrowLeft, FiChevronDown, FiXCircle } from 'react-icons/fi'
 import { useReport } from '../../context/ReportContext'
 import './Report.css'
 
@@ -42,6 +42,60 @@ function StatsCards({ sessions }) {
         <span className="report__card-label">Melhor resultado</span>
       </div>
     </div>
+  )
+}
+
+/** Exibe as frases erradas de uma sessão */
+function WrongAnswers({ wrongs }) {
+  if (!wrongs || wrongs.length === 0) {
+    return <p className="report__wrongs-empty">Nenhuma frase errada 🎉</p>
+  }
+  return (
+    <ul className="report__wrongs-list">
+      {wrongs.map((w, i) => (
+        <li key={i} className="report__wrong-item">
+          <span className="report__wrong-text">{w.text}</span>
+          <span className="report__wrong-answers">
+            <span className="report__wrong-selected">
+              <FiXCircle /> {w.selected}
+            </span>
+            <span className="report__wrong-arrow">→</span>
+            <span className="report__wrong-correct">{w.answer}</span>
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+/** Linha de sessão individual com expansão de erros */
+function SessionRow({ session }) {
+  const [open, setOpen] = useState(false)
+  const hasWrongs = session.wrongs !== undefined // sessões antigas não têm wrongs
+
+  return (
+    <li className={`report__history-item ${open ? 'report__history-item--open' : ''}`}>
+      <button
+        className="report__history-row"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+      >
+        <span>{formatDate(session.date)}</span>
+        <span className="report__history-score">
+          {session.correct}/{session.total} ({session.percentage}%)
+        </span>
+        {hasWrongs && (
+          <FiChevronDown
+            className={`report__history-chevron ${open ? 'report__history-chevron--open' : ''}`}
+          />
+        )}
+      </button>
+      {open && hasWrongs && (
+        <div className="report__wrongs">
+          <WrongAnswers wrongs={session.wrongs} />
+        </div>
+      )}
+    </li>
   )
 }
 
@@ -112,21 +166,18 @@ function SessionList({ sessions, onNavigate }) {
               />
             </div>
 
-            {group.sessions.length > 1 && (
-              <details className="report__history">
-                <summary>Ver histórico ({group.sessions.length} sessões)</summary>
-                <ul className="report__history-list">
-                  {group.sessions.map((s, i) => (
-                    <li key={i}>
-                      <span>{formatDate(s.date)}</span>
-                      <span>
-                        {s.correct}/{s.total} ({s.percentage}%)
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
+            <details className="report__history">
+              <summary>
+                {group.sessions.length > 1
+                  ? `Ver histórico (${group.sessions.length} sessões)`
+                  : 'Ver detalhes da sessão'}
+              </summary>
+              <ul className="report__history-list">
+                {group.sessions.map((s, i) => (
+                  <SessionRow key={i} session={s} />
+                ))}
+              </ul>
+            </details>
           </div>
         )
       })}
