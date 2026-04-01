@@ -312,10 +312,6 @@
   color: var(--color-text);
 }
 
-.report__history-score {
-  flex-shrink: 0;
-}
-
 .report__history-chevron {
   font-size: 0.85rem;
   color: var(--color-text-muted);

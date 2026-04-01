@@ -80,8 +80,9 @@ function SessionRow({ session }) {
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >
-        <span>{formatDate(session.date)}</span>
-        <span className="report__history-score">
+        <span>
+          {formatDate(session.date)}
+          {' — '}
           {session.correct}/{session.total} ({session.percentage}%)
         </span>
         {hasWrongs && (
