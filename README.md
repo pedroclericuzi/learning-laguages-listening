@@ -13,6 +13,323 @@ Aprenda idiomas ouvindo músicas e histórias. O 3L é um aplicativo web que com
 
 O 3L permite que o usuário pratique um novo idioma de forma imersiva, através de:
 
+- **Músicas com letras sincronizadas** — ouça músicas pelo player Spotify embutido com a letra acompanhando em tempo real, traduzida linha a linha
+- **Histórias narradas com TTS neural** — 8 contos clássicos de domínio público narrados por vozes da Microsoft Edge em qualquer idioma suportado, com texto sincronizado frase a frase
+- **Tradução instantânea de palavras** — clique em qualquer palavra do texto para ver sua tradução, classe gramatical e definições
+- **Exercícios de preenchimento (fill-in-the-blank)** — tanto nas histórias quanto nas músicas com letras sincronizadas: pratique vocabulário preenchendo lacunas com 4 opções de resposta, com pausa automática do áudio aguardando a resposta
+- **Relatório de desempenho** — histórico completo de erros e acertos agrupado por música ou conto, com média, melhor resultado e histórico de sessões
+
+### Idiomas suportados
+
+🇧🇷 Português · 🇺🇸 Inglês · 🇪🇸 Espanhol · 🇫🇷 Francês · 🇩🇪 Alemão · 🇮🇹 Italiano · 🇯🇵 Japonês · 🇰🇷 Coreano
+
+---
+
+## Arquitetura
+
+O projeto é um **monorepo** com duas aplicações separadas:
+
+```
+3l/
+├── client/          → SPA React (Vite)
+├── server/          → API REST (Express.js)
+└── package.json     → Scripts de orquestração (concurrently)
+```
+
+### Client (React + Vite)
+
+```
+client/src/
+├── main.jsx                  # Entry point + hierarquia de providers
+├── App.jsx                   # Definição de rotas (React Router)
+├── components/               # Componentes reutilizáveis
+│   ├── ErrorBoundary/        # Captura erros de renderização
+│   ├── ErrorState/           # UI genérica de erro com retry
+│   ├── Layout/               # Shell do app (sidebar + bottom tabs)
+│   ├── SongCard/             # Card de música
+│   ├── StoryCard/            # Card de história
+│   ├── Toast/                # Sistema de notificações (context + hook)
+│   └── WordTranslation/      # Texto clicável + popup de tradução
+├── context/
+│   ├── FavoritesContext.jsx  # IDs de músicas favoritas (localStorage)
+│   ├── LanguageContext.jsx   # Idioma nativo e alvo (localStorage)
+│   ├── ReportContext.jsx     # Histórico de quiz erosacertos (localStorage)
+│   └── SpotifyContext.jsx    # OAuth Spotify (token, isPremium)
+├── pages/
+│   ├── Onboarding/           # Seleção de idiomas (2 telas)
+│   ├── Home/                 # Dashboard principal
+│   ├── SongList/             # Busca e listagem de músicas
+│   ├── Player/               # Player de música com letras, highlight e quiz
+│   ├── Stories/              # Catálogo de histórias
+│   ├── StoryPlayer/          # Player de história com narração e quiz
+│   ├── Favorites/            # Músicas favoritas
+│   ├── Report/               # Relatório de desempenho (erros/acertos)
+│   └── Settings/             # Configurações e conexão com Spotify
+└── styles/
+    └── global.css            # Estilos globais e variáveis CSS
+```
+
+**Hierarquia de Providers:**
+
+```
+React.StrictMode
+  └─ BrowserRouter
+      └─ ErrorBoundary
+          └─ LanguageProvider       ← idiomas (localStorage)
+              └─ FavoritesProvider  ← favoritos (localStorage)
+                  └─ SpotifyProvider  ← OAuth Spotify
+                      └─ ReportProvider  ← relatório (localStorage)
+                          └─ ToastProvider  ← notificações
+                              └─ App
+```
+
+**Rotas:**
+
+| Rota | Página | Descrição |
+|---|---|---|
+| `/onboarding/native` | NativeLanguage | Selecionar idioma nativo |
+| `/onboarding/target` | TargetLanguage | Selecionar idioma alvo |
+| `/` | Home | Dashboard com músicas populares e histórias |
+| `/songs` | SongList | Buscar e navegar músicas |
+| `/player/:id` | Player | Player de música com letras sincronizadas e quiz |
+| `/stories` | Stories | Catálogo de contos |
+| `/story/:id` | StoryPlayer | Player de história com narração e quiz |
+| `/favorites` | Favorites | Músicas salvas |
+| `/report` | Report | Relatório de desempenho por música/conto |
+| `/settings` | Settings | Configurações e conexão Spotify |
+
+### Server (Express.js)
+
+```
+server/
+├── index.js              # Entry point — rotas e middleware
+├── .env                  # Credenciais Spotify (não versionado)
+├── data/
+│   ├── languages.js      # 8 idiomas suportados
+│   └── stories.js        # 8 contos com frases segmentadas
+├── routes/
+│   ├── languages.js      # GET /api/languages
+│   ├── songs.js          # Busca, detalhes e letras de músicas
+│   ├── stories.js        # Listagem, áudio TTS e conteúdo de histórias
+│   └── translate.js      # Tradução de palavras individuais
+├── services/
+│   ├── blanks.js         # Geração de fill-in-the-blank (compartilhado)
+│   ├── lrclib.js         # LRCLIB (letras sincronizadas em formato LRC)
+│   ├── spotify.js        # API do Spotify (busca, chart, detalhes)
+│   ├── translator.js     # Google Translate (tradução + detecção de idioma)
+│   └── tts.js            # Microsoft Edge Neural TTS (via edge-tts/Python)
+└── cache/
+    ├── translations.json       # Cache de traduções de texto
+    ├── word_translations.json  # Cache de traduções de palavras
+    └── tts/                    # Áudio MP3 + legendas VTT gerados
+```
+
+**Endpoints da API:**
+
+| Método | Rota | Descrição |
+|---|---|---|
+| `GET` | `/api/health` | Health check |
+| `GET` | `/api/languages` | Lista de idiomas suportados |
+| `GET` | `/api/songs/search?q=&limit=` | Buscar músicas (Spotify) |
+| `GET` | `/api/songs/popular?limit=` | Top chart global (Spotify) |
+| `GET` | `/api/songs/language/:code` | Músicas curadas por idioma |
+| `GET` | `/api/songs/:id` | Detalhes de uma faixa |
+| `GET` | `/api/songs/:id/lyrics?translate=` | Letra sincronizada + tradução + blanks |
+| `GET` | `/api/stories?lang=` | Listar histórias com metadados |
+| `GET` | `/api/stories/:id?lang=` | Detalhes de uma história |
+| `GET` | `/api/stories/:id/audio?lang=` | Áudio MP3 narrado (TTS) |
+| `GET` | `/api/stories/:id/content?lang=&translate=` | Conteúdo com timestamps, tradução e quiz |
+| `POST` | `/api/translate/word` | Traduzir palavra individual |
+
+### APIs e Serviços Externos
+
+| Serviço | Uso | Autenticação |
+|---|---|---|
+| **Spotify** | Busca de músicas, charts, embed player | Client Credentials (`SPOTIFY_CLIENT_ID` + `SPOTIFY_CLIENT_SECRET`) |
+| **LRCLIB** | Letras sincronizadas (formato LRC) | Pública |
+| **Google Translate** | Tradução de texto e detecção de idioma | Pública (informal) |
+| **Microsoft Edge TTS** | Narração com vozes neurais (via Python) | CLI `edge-tts` |
+
+> **Nota sobre o Spotify:** Desde 2024, a API do Spotify removeu `preview_url` das respostas e limita buscas com `client_credentials` a no máximo 10 resultados por requisição. O player usa o **embed iframe** (`open.spotify.com/embed/track/:id`) — 30 segundos grátis para todos, música completa para assinantes Premium. O quiz funciona em ambos os casos mas a **pausa automática** só ocorre no modo Preview (quando `preview_url` disponível).
+
+### Cache
+
+O servidor mantém cache em disco para evitar chamadas repetidas:
+
+- **Traduções de texto** → `cache/translations.json`
+- **Traduções de palavras** → `cache/word_translations.json`
+- **Áudio TTS** → `cache/tts/*.mp3` + `*.vtt` + `*_sentences.json`
+
+---
+
+## Tech Stack
+
+### Client
+
+| Tecnologia | Versão | Uso |
+|---|---|---|
+| React | 18.3 | UI e gerenciamento de estado |
+| React Router | 6.26 | Roteamento SPA |
+| React Icons | 5.3 | Ícones (Feather, Material, etc.) |
+| Vite | 5.4 | Bundler e dev server |
+| CSS Variáveis | — | Tematização global |
+
+### Server
+
+| Tecnologia | Versão | Uso |
+|---|---|---|
+| Node.js | 18+ | Runtime (native `fetch`) |
+| Express | 4.21 | Framework HTTP |
+| CORS | 2.8 | Cross-origin requests |
+| dotenv | — | Leitura de variáveis de ambiente do `.env` |
+| edge-tts (Python) | — | Geração de áudio por TTS neural |
+
+### Ferramentas
+
+| Ferramenta | Uso |
+|---|---|
+| Concurrently | Rodar client e server em paralelo |
+| Vite Proxy | Redirecionar `/api` → server em dev |
+
+---
+
+## Como Rodar
+
+### Pré-requisitos
+
+- **Node.js** 18 ou superior
+- **Python 3** com o pacote `edge-tts` instalado:
+
+```bash
+pip install edge-tts
+```
+
+- **Conta de desenvolvedor Spotify** com um app criado em [developer.spotify.com](https://developer.spotify.com)
+
+### Configuração do ambiente
+
+Crie o arquivo `server/.env` a partir do exemplo:
+
+```bash
+cp server/.env.example server/.env
+```
+
+Preencha as credenciais do seu app Spotify:
+
+```env
+SPOTIFY_CLIENT_ID=seu_client_id_aqui
+SPOTIFY_CLIENT_SECRET=seu_client_secret_aqui
+CLIENT_URL=http://localhost:5173
+```
+
+### Instalação
+
+```bash
+# Clonar o repositório
+git clone https://github.com/pedroclericuzi/learning-laguages-listening.git
+cd learning-laguages-listening
+
+# Instalar dependências (client + server)
+npm run install:all
+```
+
+### Desenvolvimento
+
+```bash
+# Iniciar client (porta 5173) e server (porta 3001) simultaneamente
+npm run dev
+```
+
+Ou separadamente:
+
+```bash
+# Apenas o server
+npm run dev:server
+
+# Apenas o client
+npm run dev:client
+```
+
+Acesse **http://localhost:5173** no navegador.
+
+### Build de Produção
+
+```bash
+cd client
+npm run build
+npm run preview
+```
+
+---
+
+## Histórias Disponíveis
+
+O app inclui 8 contos clássicos de domínio público, cada um com frases segmentadas para narração sincronizada e exercícios:
+
+| História | Autor | Dificuldade | Frases |
+|---|---|---|---|
+| Chapeuzinho Vermelho | Irmãos Grimm | Iniciante | 35 |
+| Os Três Porquinhos | Joseph Jacobs | Iniciante | 27 |
+| A Tartaruga e a Lebre | Esopo | Iniciante | 22 |
+| O Patinho Feio | Hans Christian Andersen | Intermediário | 31 |
+| O Menino que Gritava Lobo | Esopo | Iniciante | 23 |
+| Cachinhos Dourados | Robert Southey | Iniciante | ~27 |
+| João e o Pé de Feijão | Folclore Inglês | Intermediário | 34 |
+| Cinderela | Charles Perrault | Intermediário | 32 |
+
+---
+
+## Estrutura de Dados
+
+### Persistência no Client (localStorage)
+
+| Chave | Conteúdo |
+|---|---|
+| `3l-languages` | `{ nativeLanguage, targetLanguage }` |
+| `3l-favorites` | Array de IDs de músicas (Spotify) |
+| `3l-spotify-token` | Token OAuth Spotify do usuário (opcional) |
+| `3l-report` | `{ stories: [...], songs: [...] }` — histórico do quiz |
+
+### Fluxo Principal
+
+1. **Onboarding** — usuário seleciona idioma nativo e idioma alvo
+2. **Home** — dashboard com músicas populares, músicas no idioma alvo e histórias
+3. **Player de Música** — reproduz via embed Spotify com letra sincronizada, highlight da linha ativa, tradução, clique em palavras e quiz fill-in-the-blank
+4. **Player de História** — narra conto com TTS neural, mostra texto sincronizado, tradução e quiz com pausa automática
+5. **Favoritos** — músicas salvas localmente
+6. **Relatório** — exibe estatísticas de acerto agrupadas por música ou conto, com histórico de sessões e melhor desempenho
+
+---
+
+## Scripts Disponíveis
+
+| Comando | Descrição |
+|---|---|
+| `npm run dev` | Inicia client e server em paralelo |
+| `npm run dev:client` | Inicia apenas o Vite dev server |
+| `npm run dev:server` | Inicia apenas o Express (com --watch) |
+| `npm run install:all` | Instala dependências de ambos |
+
+---
+
+## Licença
+
+Projeto acadêmico / pessoal.
+
+
+Aprenda idiomas ouvindo músicas e histórias. O 3L é um aplicativo web que combina letras sincronizadas de músicas, narração de contos clássicos com TTS neural, tradução instantânea palavra a palavra e exercícios de vocabulário — tudo em 8 idiomas.
+
+![React](https://img.shields.io/badge/React-18.3-61DAFB?logo=react&logoColor=white)
+![Vite](https://img.shields.io/badge/Vite-5.4-646CFF?logo=vite&logoColor=white)
+![Express](https://img.shields.io/badge/Express-4.21-000000?logo=express&logoColor=white)
+![Node](https://img.shields.io/badge/Node-18+-339933?logo=node.js&logoColor=white)
+
+---
+
+## Objetivo
+
+O 3L permite que o usuário pratique um novo idioma de forma imersiva, através de:
+
 - **Músicas com letras sincronizadas** — ouça prévias de 30 segundos do Deezer com a letra acompanhando em tempo real, traduzida linha a linha
 - **Histórias narradas com TTS neural** — 8 contos clássicos de domínio público narrados por vozes da Microsoft Edge em qualquer idioma suportado, com texto sincronizado frase a frase
 - **Tradução instantânea de palavras** — clique em qualquer palavra do texto para ver sua tradução, classe gramatical e definições
