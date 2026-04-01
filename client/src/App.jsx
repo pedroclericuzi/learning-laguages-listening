@@ -9,6 +9,7 @@ import Stories from './pages/Stories'
 import StoryPlayer from './pages/StoryPlayer'
 import Favorites from './pages/Favorites'
 import Settings from './pages/Settings'
+import Report from './pages/Report'
 import Layout from './components/Layout'
 
 export default function App() {
@@ -30,6 +31,7 @@ export default function App() {
           <Route path="/stories" element={<Stories />} />
           <Route path="/story/:id" element={<StoryPlayer />} />
           <Route path="/favorites" element={<Favorites />} />
+          <Route path="/report" element={<Report />} />
           <Route path="/settings" element={<Settings />} />
         </Route>
       ) : (

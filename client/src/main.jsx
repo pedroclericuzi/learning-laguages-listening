@@ -4,6 +4,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { LanguageProvider } from './context/LanguageContext'
 import { FavoritesProvider } from './context/FavoritesContext'
 import { SpotifyProvider } from './context/SpotifyContext'
+import { ReportProvider } from './context/ReportContext'
 import { ToastProvider } from './components/Toast'
 import ErrorBoundary from './components/ErrorBoundary'
 import App from './App'
@@ -16,9 +17,11 @@ ReactDOM.createRoot(document.getElementById('root')).render(
         <LanguageProvider>
           <FavoritesProvider>
             <SpotifyProvider>
-              <ToastProvider>
-                <App />
-              </ToastProvider>
+              <ReportProvider>
+                <ToastProvider>
+                  <App />
+                </ToastProvider>
+              </ReportProvider>
             </SpotifyProvider>
           </FavoritesProvider>
         </LanguageProvider>

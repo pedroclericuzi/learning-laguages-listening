@@ -14,6 +14,7 @@ import {
   FiVolume2,
 } from 'react-icons/fi'
 import { useLanguage } from '../../context/LanguageContext'
+import { useReport } from '../../context/ReportContext'
 import { useToast } from '../../components/Toast'
 import ErrorState from '../../components/ErrorState'
 import { ClickableText, WordPopup } from '../../components/WordTranslation'
@@ -23,6 +24,12 @@ export default function StoryPlayer() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { targetLanguage, nativeLanguage } = useLanguage()
+  const { saveStoryResult } = useReport()
+
+  // Refs to track latest quiz state for save-on-unmount
+  const quizAnswersRef = useRef({})
+  const quizTotalRef = useRef(0)
+  const contentRef = useRef(null)
 
   const audioRef = useRef(null)
   const linesRef = useRef(null)
@@ -43,12 +50,30 @@ export default function StoryPlayer() {
 
   // Quiz state: { [lineIndex]: { answered: bool, correct: bool, selected: string } }
   const [quizAnswers, setQuizAnswers] = useState({})
+
+  // Keep refs in sync for save-on-unmount
+  useEffect(() => { quizAnswersRef.current = quizAnswers }, [quizAnswers])
+
   const [quizMode, setQuizMode] = useState(true)
   const [quizPaused, setQuizPaused] = useState(false) // Pausa automática para quiz
   const wasPlayingRef = useRef(false) // Se estava tocando antes da pausa do quiz
   const pauseCooldownRef = useRef(0) // Timestamp até quando ignorar pausas
 
   // Buscar conteúdo com timestamps + tradução
+  // Save result when leaving the page
+  useEffect(() => {
+    return () => {
+      const answers = quizAnswersRef.current
+      const total = quizTotalRef.current
+      const answered = Object.keys(answers).length
+      const correct = Object.values(answers).filter((a) => a.correct).length
+      const title = contentRef.current?.title || id
+      if (answered > 0) {
+        saveStoryResult(id, title, correct, answered)
+      }
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   function loadContent() {
     setLoading(true)
     setError(null)
@@ -60,7 +85,11 @@ export default function StoryPlayer() {
         if (!r.ok) throw new Error('Conto não encontrado')
         return r.json()
       })
-      .then(setContent)
+      .then((data) => {
+        setContent(data)
+        contentRef.current = data
+        quizTotalRef.current = (data.lines || []).filter((l) => l.blank).length
+      })
       .catch((e) => {
         setError(e.message)
         toast.error('Falha ao carregar o conto. Verifique sua conexão.')

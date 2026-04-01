@@ -1,5 +1,5 @@
 import { Outlet, NavLink, useLocation } from 'react-router-dom'
-import { FiHome, FiHeart, FiSettings, FiMusic, FiBookOpen } from 'react-icons/fi'
+import { FiHome, FiHeart, FiSettings, FiMusic, FiBookOpen, FiBarChart2 } from 'react-icons/fi'
 import './Layout.css'
 
 const navItems = [
@@ -7,6 +7,7 @@ const navItems = [
   { to: '/stories', label: 'Contos', icon: FiBookOpen },
   { to: '/songs', label: 'Músicas', icon: FiMusic },
   { to: '/favorites', label: 'Favoritos', icon: FiHeart },
+  { to: '/report', label: 'Relatório', icon: FiBarChart2 },
   { to: '/settings', label: 'Ajustes', icon: FiSettings },
 ]
 
