@@ -25,14 +25,14 @@ export default function SongList() {
   const fetchSongs = useCallback(async (query) => {
     setLoading(true)
     setError(null)
+    // Usa lang da URL ou idioma alvo do usuário como fallback
+    const lang = langParam || targetLanguage
     try {
       let url
       if (query?.trim()) {
-        url = `/api/songs/search?q=${encodeURIComponent(query)}`
-      } else if (langParam) {
-        url = `/api/songs/language/${langParam}`
+        url = `/api/songs/search?q=${encodeURIComponent(query)}&lang=${lang}`
       } else {
-        url = '/api/songs/popular?limit=30'
+        url = `/api/songs/language/${lang}`
       }
       const res = await fetch(url)
       if (!res.ok) throw new Error('Erro ao buscar músicas')
@@ -44,7 +44,7 @@ export default function SongList() {
     } finally {
       setLoading(false)
     }
-  }, [langParam, toast])
+  }, [langParam, targetLanguage, toast])
 
   // Busca com debounce
   useEffect(() => {
