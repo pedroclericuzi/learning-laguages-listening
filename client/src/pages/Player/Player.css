@@ -403,6 +403,22 @@
   overflow: hidden;
 }
 
+/* Container onde a iFrame API injeta o player */
+.player__spotify-embed {
+  width: 100%;
+  height: 152px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #000;
+}
+
+.player__spotify-embed iframe {
+  width: 100% !important;
+  height: 100% !important;
+  border: none !important;
+  border-radius: 12px;
+}
+
 .player__spotify-hint {
   font-size: 0.75rem;
   color: var(--color-text-muted);

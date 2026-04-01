@@ -59,6 +59,12 @@ export default function Player() {
   const quizTotalRef = useRef(0)
   const songTitleRef = useRef('')
 
+  // Spotify iFrame API
+  const embedDivRef = useRef(null)
+  const embedControllerRef = useRef(null)
+  const isMountedRef = useRef(true)
+  useEffect(() => () => { isMountedRef.current = false }, [])
+
   // 1. Buscar dados da música (Spotify)
   function loadSong() {
     setLoading(true)
@@ -95,6 +101,58 @@ export default function Player() {
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // ── Spotify iFrame API ─────────────────────────────────────────────────────
+  // Inicializa o EmbedController e escuta playbackUpdate para obter currentTime
+  function initEmbedController(api) {
+    if (!embedDivRef.current || !song) return
+    // Destruir controller anterior se existir
+    embedControllerRef.current = null
+    api.createController(
+      embedDivRef.current,
+      { uri: `spotify:track:${song.id}` },
+      (controller) => {
+        embedControllerRef.current = controller
+        controller.addListener('playbackUpdate', ({ data }) => {
+          if (!data || !isMountedRef.current) return
+          setCurrentTime(data.position / 1000)   // ms → s
+          setDuration(data.duration / 1000)
+          setIsPlaying(!data.isPaused)
+        })
+      }
+    )
+  }
+
+  useEffect(() => {
+    if (playerMode !== 'spotify' || !song) return
+    // Se o controller já existe, apenas muda a faixa
+    if (embedControllerRef.current) {
+      embedControllerRef.current.loadUri(`spotify:track:${song.id}`)
+      return
+    }
+    // Se a API já foi carregada anteriormente
+    if (window._spotifyIframeApi) {
+      initEmbedController(window._spotifyIframeApi)
+      return
+    }
+    // Configura callback para quando a API carregar
+    window.onSpotifyIframeApiReady = (IFrameAPI) => {
+      window._spotifyIframeApi = IFrameAPI
+      if (isMountedRef.current) initEmbedController(IFrameAPI)
+    }
+    // Injeta o script uma única vez
+    if (!document.querySelector('script[src*="spotify.com/embed/iframe-api"]')) {
+      const script = document.createElement('script')
+      script.src = 'https://open.spotify.com/embed/iframe-api/v1'
+      script.async = true
+      document.head.appendChild(script)
+    }
+  }, [song, playerMode]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Invalida controller quando sai do modo Spotify
+  useEffect(() => {
+    if (playerMode !== 'spotify') embedControllerRef.current = null
+  }, [playerMode])
+
   // 2. Buscar letras + tradução (LRCLIB + Google Translate)
   useEffect(() => {
     if (!song) return
@@ -122,13 +180,14 @@ export default function Player() {
   // Atualizar lyric ativo baseado no tempo (apenas se synced)
   useEffect(() => {
     if (!isSynced || !lyrics.length) return
+    if (quizPaused) return // manter highlight durante quiz
     const index = lyrics.findIndex(
       (l) => currentTime >= l.start && currentTime < l.end
     )
     if (index !== activeLyricIndex) {
       setActiveLyricIndex(index)
     }
-  }, [currentTime, lyrics, isSynced, activeLyricIndex])
+  }, [currentTime, lyrics, isSynced, activeLyricIndex, quizPaused])
 
   // Auto-scroll para lyric ativo
   useEffect(() => {
@@ -140,15 +199,18 @@ export default function Player() {
     }
   }, [activeLyricIndex])
 
-  // Repetir trecho (apenas synced)
+  // Repetir trecho
   useEffect(() => {
-    if (repeatIndex !== null && isSynced && lyrics[repeatIndex]) {
-      const lyric = lyrics[repeatIndex]
-      if (currentTime >= lyric.end) {
+    if (repeatIndex === null || !isSynced || !lyrics[repeatIndex]) return
+    const lyric = lyrics[repeatIndex]
+    if (currentTime >= lyric.end) {
+      if (playerMode === 'preview' && audioRef.current) {
         audioRef.current.currentTime = lyric.start
+      } else if (playerMode === 'spotify' && embedControllerRef.current) {
+        embedControllerRef.current.seek(lyric.start * 1000)
       }
     }
-  }, [currentTime, repeatIndex, lyrics, isSynced])
+  }, [currentTime, repeatIndex, lyrics, isSynced, playerMode])
 
   // Manter ref sincronizado para save-on-unmount
   useEffect(() => { quizAnswersRef.current = quizAnswers }, [quizAnswers])
@@ -164,19 +226,22 @@ export default function Player() {
       .filter((item) => item.hasBlank && !quizAnswers[item.index]?.answered)
   }, [lyrics, quizMode, quizAnswers, isSynced])
 
-  // Pausar no final da frase para o quiz (apenas modo preview)
+  // Pausar no final da frase para o quiz (ambos os modos)
   useEffect(() => {
-    if (!quizMode || !audioRef.current || !lyrics.length || quizPaused) return
-    if (playerMode !== 'preview') return
+    if (!quizMode || !lyrics.length || quizPaused) return
     if (Date.now() < pauseCooldownRef.current) return
 
     const pending = pendingQuizEndTimes.current
     for (const item of pending) {
       if (currentTime >= item.end - 0.05 && currentTime <= item.end + 0.5) {
-        audioRef.current.pause()
-        audioRef.current.currentTime = item.end
+        if (playerMode === 'preview' && audioRef.current) {
+          audioRef.current.pause()
+          audioRef.current.currentTime = item.end
+          setIsPlaying(false)
+        } else if (playerMode === 'spotify' && embedControllerRef.current) {
+          embedControllerRef.current.pause()
+        }
         wasPlayingRef.current = true
-        setIsPlaying(false)
         setQuizPaused(true)
         setActiveLyricIndex(item.index)
         break
@@ -184,7 +249,7 @@ export default function Player() {
     }
   }, [currentTime, lyrics, quizMode, quizPaused, playerMode])
 
-  // RAF polling preciso para detecção da pausa do quiz
+  // RAF polling preciso apenas no modo preview (Spotify usa playbackUpdate)
   useEffect(() => {
     if (!quizMode || !isPlaying || playerMode !== 'preview') return
     let rafId
@@ -240,15 +305,16 @@ export default function Player() {
   }
 
   function handleLyricClick(index) {
-    if (!isSynced || !audioRef.current || !lyrics[index]) return
+    if (!isSynced || !lyrics[index]) return
     if (repeatIndex === index) {
       setRepeatIndex(null)
     } else {
       setRepeatIndex(index)
-      audioRef.current.currentTime = lyrics[index].start
-      if (!isPlaying) {
-        audioRef.current.play()
-        setIsPlaying(true)
+      if (playerMode === 'preview' && audioRef.current) {
+        audioRef.current.currentTime = lyrics[index].start
+        if (!isPlaying) { audioRef.current.play(); setIsPlaying(true) }
+      } else if (playerMode === 'spotify' && embedControllerRef.current) {
+        embedControllerRef.current.seek(lyrics[index].start * 1000)
       }
     }
   }
@@ -271,13 +337,17 @@ export default function Player() {
       [lineIndex]: { answered: true, correct, selected },
     }))
 
-    if (quizPaused && audioRef.current) {
+    if (quizPaused) {
       setTimeout(() => {
         pauseCooldownRef.current = Date.now() + 500
         setQuizPaused(false)
         if (wasPlayingRef.current) {
-          audioRef.current.play()
-          setIsPlaying(true)
+          if (playerMode === 'preview' && audioRef.current) {
+            audioRef.current.play()
+            setIsPlaying(true)
+          } else if (playerMode === 'spotify' && embedControllerRef.current) {
+            embedControllerRef.current.resume()
+          }
           wasPlayingRef.current = false
         }
       }, 800)
@@ -286,13 +356,18 @@ export default function Player() {
 
   function replayLyric(e, index) {
     e.stopPropagation()
-    if (!audioRef.current || !lyrics[index]) return
+    if (!lyrics[index]) return
     pauseCooldownRef.current = Date.now() + 500
     setQuizPaused(false)
     wasPlayingRef.current = true
-    audioRef.current.currentTime = lyrics[index].start
-    audioRef.current.play()
-    setIsPlaying(true)
+    if (playerMode === 'preview' && audioRef.current) {
+      audioRef.current.currentTime = lyrics[index].start
+      audioRef.current.play()
+      setIsPlaying(true)
+    } else if (playerMode === 'spotify' && embedControllerRef.current) {
+      embedControllerRef.current.seek(lyrics[index].start * 1000)
+      embedControllerRef.current.resume()
+    }
   }
 
   const quizTotal = lyrics.filter((l) => l.blank).length
@@ -446,16 +521,7 @@ export default function Player() {
           </div>
 
           <div className="player__spotify-widget">
-            <iframe
-              title="Spotify Player"
-              src={`https://open.spotify.com/embed/track/${song.id}?utm_source=generator&theme=0`}
-              width="100%"
-              height="152"
-              frameBorder="0"
-              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
-              loading="lazy"
-              style={{ borderRadius: '12px', border: 'none' }}
-            />
+            <div ref={embedDivRef} className="player__spotify-embed" />
           </div>
 
           <p className="player__spotify-hint">
