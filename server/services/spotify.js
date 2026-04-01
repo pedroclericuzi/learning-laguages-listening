@@ -50,12 +50,16 @@ async function spotifyFetch(endpoint) {
   return res.json()
 }
 
+// Spotify Client Credentials limita a 10 resultados por request
+const SPOTIFY_MAX_LIMIT = 10
+
 /**
  * Buscar músicas no Spotify
  */
-export async function searchSongs(query, limit = 25) {
+export async function searchSongs(query, limit = 10) {
+  const safeLimit = Math.min(limit, SPOTIFY_MAX_LIMIT)
   const data = await spotifyFetch(
-    `/search?q=${encodeURIComponent(query)}&type=track&limit=${limit}`
+    `/search?q=${encodeURIComponent(query)}&type=track&limit=${safeLimit}`
   )
   return (data.tracks?.items || []).map(formatTrack)
 }
@@ -81,33 +85,73 @@ export async function getTrack(id) {
 }
 
 /**
- * Top tracks globais (via busca de hits populares)
+ * Top tracks globais — múltiplas buscas para contornar limit=10 do Spotify
  */
-export async function getChart(limit = 20) {
-  // Spotify editorial playlists requerem permissões especiais.
-  // Usamos busca por termos populares como alternativa.
-  const data = await spotifyFetch(
-    `/search?q=${encodeURIComponent('top hits 2025')}&type=track&limit=${limit}`
+export async function getChart(limit = 30) {
+  const queries = ['top hits 2025', 'viral hits 2024', 'global top songs']
+  const perQuery = Math.min(SPOTIFY_MAX_LIMIT, Math.ceil(limit / queries.length))
+
+  const results = await Promise.allSettled(
+    queries.map((q) =>
+      spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=track&limit=${perQuery}`)
+        .then((d) => (d.tracks?.items || []).map(formatTrack))
+    )
   )
-  return (data.tracks?.items || []).map(formatTrack)
+
+  // Juntar resultados, remover duplicatas por ID, respeitar limit
+  const seen = new Set()
+  const songs = []
+  for (const r of results) {
+    if (r.status === 'fulfilled') {
+      for (const s of r.value) {
+        if (!seen.has(s.id) && songs.length < limit) {
+          seen.add(s.id)
+          songs.push(s)
+        }
+      }
+    }
+  }
+  return songs
 }
 
 /**
- * Músicas curadas para aprendizado de idiomas
+ * Músicas curadas para aprendizado de idiomas — múltiplas buscas por idioma
  */
 export async function getLanguageSongs(langCode) {
-  const queries = {
-    en: 'top hits english',
-    es: 'top hits spanish',
-    fr: 'top hits french',
-    pt: 'top hits brazilian',
-    de: 'top hits german',
-    it: 'top hits italian',
-    ja: 'top hits japanese',
-    ko: 'top hits kpop',
+  const queryMap = {
+    en: ['top english hits', 'popular english songs', 'best english pop'],
+    es: ['top spanish hits', 'musica popular espanol', 'reggaeton hits'],
+    fr: ['top french hits', 'chanson francaise populaire', 'musique francaise'],
+    pt: ['top brazilian hits', 'musica brasileira popular', 'sertanejo hits'],
+    de: ['top german hits', 'deutsche musik popular', 'schlager hits'],
+    it: ['top italian hits', 'musica italiana popolare', 'pop italiano'],
+    ja: ['top japanese hits', 'j-pop popular', 'japanese pop music'],
+    ko: ['top kpop hits', 'korean pop popular', 'kpop songs'],
   }
-  const query = queries[langCode] || `top ${langCode} songs`
-  return searchSongs(query, 20)
+
+  const queries = queryMap[langCode] || [`top ${langCode} songs`, `${langCode} popular music`]
+
+  const results = await Promise.allSettled(
+    queries.map((q) =>
+      spotifyFetch(`/search?q=${encodeURIComponent(q)}&type=track&limit=${SPOTIFY_MAX_LIMIT}`)
+        .then((d) => (d.tracks?.items || []).map(formatTrack))
+    )
+  )
+
+  // Juntar, desduplicar por ID
+  const seen = new Set()
+  const songs = []
+  for (const r of results) {
+    if (r.status === 'fulfilled') {
+      for (const s of r.value) {
+        if (!seen.has(s.id)) {
+          seen.add(s.id)
+          songs.push(s)
+        }
+      }
+    }
+  }
+  return songs
 }
 
 function formatTrack(track) {
