@@ -12,7 +12,6 @@ import {
 } from 'react-icons/fi'
 import { useLanguage } from '../../context/LanguageContext'
 import { useFavorites } from '../../context/FavoritesContext'
-import { useSpotify } from '../../context/SpotifyContext'
 import { useToast } from '../../components/Toast'
 import ErrorState from '../../components/ErrorState'
 import { ClickableText, WordPopup } from '../../components/WordTranslation'
@@ -23,14 +22,13 @@ export default function Player() {
   const navigate = useNavigate()
   const { nativeLanguage } = useLanguage()
   const { isFavorite, toggleFavorite } = useFavorites()
-  const { isPremium, isConnected } = useSpotify()
 
   const audioRef = useRef(null)
   const lyricsRef = useRef(null)
   const toast = useToast()
 
-  // 'preview' = 30s com sync, 'spotify' = widget completo
-  const [playerMode, setPlayerMode] = useState('preview')
+  // 'spotify' = embed iframe (padrão), 'preview' = 30s com sync de letras (apenas quando preview_url disponível)
+  const [playerMode, setPlayerMode] = useState('spotify')
   const [song, setSong] = useState(null)
   const [lyricsData, setLyricsData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -196,20 +194,20 @@ export default function Player() {
         <FiArrowLeft /> Voltar
       </button>
 
-      {/* Seletor de modo: Preview vs Spotify Premium */}
-      {isConnected && isPremium && (
+      {/* Seletor de modo: só aparece se a música tem preview_url (raro desde 2024) */}
+      {song?.preview && (
         <div className="player__mode-toggle">
-          <button
-            className={`player__mode-btn ${playerMode === 'preview' ? 'player__mode-btn--active' : ''}`}
-            onClick={() => setPlayerMode('preview')}
-          >
-            🎵 Preview 30s (sincronizado)
-          </button>
           <button
             className={`player__mode-btn ${playerMode === 'spotify' ? 'player__mode-btn--active' : ''}`}
             onClick={() => setPlayerMode('spotify')}
           >
-            💚 Spotify Premium (completo)
+            🎵 Spotify Player
+          </button>
+          <button
+            className={`player__mode-btn ${playerMode === 'preview' ? 'player__mode-btn--active' : ''}`}
+            onClick={() => setPlayerMode('preview')}
+          >
+            🔁 Preview sincronizado
           </button>
         </div>
       )}
@@ -316,7 +314,7 @@ export default function Player() {
           )}
 
           <div className="player__meta">
-            <span className="player__badge player__badge--premium">💚 Premium</span>
+            <span className="player__badge player__badge--premium">🎵 Spotify</span>
             {lyricsData?.language && (
               <span className="player__badge">{lyricsData.language.toUpperCase()}</span>
             )}
@@ -336,7 +334,7 @@ export default function Player() {
           </div>
 
           <p className="player__spotify-hint">
-            Música completa via Spotify. Faça login no widget se necessário.
+            30s grátis · Música completa com Spotify Premium. Faça login no widget se necessário.
           </p>
 
           <div className="player__controls">
