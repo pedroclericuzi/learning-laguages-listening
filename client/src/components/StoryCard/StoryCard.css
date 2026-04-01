@@ -20,9 +20,12 @@
   width: 56px;
   height: 56px;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
-  font-size: 1.8rem;
+  font-size: 1.4rem;
+  line-height: 1;
+  gap: 0.1rem;
   background: var(--color-bg-elevated);
   border-radius: var(--radius-md);
   flex-shrink: 0;

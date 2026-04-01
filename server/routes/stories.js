@@ -16,22 +16,77 @@ const STOP_WORDS = new Set([
   'those', 'what', 'who', 'whom', 'which', 'how', 'when', 'where', 'there',
   'up', 'out', 'into', 'from', 'than', 'then', 'very', 'just', 'also',
   'too', 'all', 'each', 'both', 'some', 'any', 'one', 'two', 'said',
+  // Japonês: partículas e palavras auxiliares comuns
+  'は', 'が', 'を', 'に', 'で', 'と', 'の', 'も', 'か', 'へ', 'や', 'から',
+  'まで', 'より', 'な', 'だ', 'です', 'ます', 'た', 'て', 'し', 'れ', 'る',
+  // Coreano: partículas e auxiliares comuns
+  '은', '는', '이', '가', '을', '를', '에', '의', '와', '과', '도', '로',
 ])
+
+// ── Helpers para detecção CJK ──────────────────────────────────
+const CJK_REGEX = /[\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]/
+const LATIN_WORD_REGEX = /[a-zA-ZÀ-ÿ']+/g
+
+function isCJK(text) {
+  return CJK_REGEX.test(text)
+}
+
+/**
+ * Segmenta texto em "palavras" usando Intl.Segmenter (CJK-aware).
+ * Retorna array de { word, index } para palavras significativas.
+ */
+function segmentWords(text) {
+  if (isCJK(text)) {
+    try {
+      const segmenter = new Intl.Segmenter('ja', { granularity: 'word' })
+      return [...segmenter.segment(text)]
+        .filter((seg) => seg.isWordLike)
+        .map((seg) => ({ word: seg.segment, index: seg.index }))
+    } catch {
+      // Fallback: agrupar CJK contíguos (2+ chars)
+      const tokens = []
+      const regex = /([\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FFF\uAC00-\uD7AF]{2,})/g
+      let m
+      while ((m = regex.exec(text)) !== null) {
+        tokens.push({ word: m[0], index: m.index })
+      }
+      return tokens
+    }
+  }
+  // Latinas
+  const tokens = []
+  let m
+  while ((m = LATIN_WORD_REGEX.exec(text)) !== null) {
+    tokens.push({ word: m[0], index: m.index })
+  }
+  LATIN_WORD_REGEX.lastIndex = 0
+  return tokens
+}
+
+/**
+ * Verifica se uma palavra é candidata para blank (não stop-word, tamanho mínimo).
+ */
+function isCandidate(word) {
+  if (STOP_WORDS.has(word.toLowerCase())) return false
+  if (isCJK(word)) return word.length >= 2 // Kanji/palavras CJK: pelo menos 2 chars
+  return word.length >= 3 // Latinas: pelo menos 3 chars
+}
 
 /**
  * Gera dados de "fill-in-the-blank" para cada frase.
- * - Escolhe uma palavra significativa (não stop word, >= 3 letras)
+ * - Escolhe uma palavra significativa (não stop word, tamanho mínimo)
  * - Gera 3 distratores de outras palavras do texto
  * - Retorna: { blankedText, answer, options[] }
+ * - Suporta CJK (japonês, coreano, chinês) via Intl.Segmenter
  */
 function generateBlanks(sentences) {
   // Coletar todas as palavras significativas do texto inteiro
   const allWords = new Set()
   for (const s of sentences) {
-    const words = s.match(/[a-zA-ZÀ-ÿ']+/g) || []
-    for (const w of words) {
-      if (w.length >= 3 && !STOP_WORDS.has(w.toLowerCase())) {
-        allWords.add(w.toLowerCase())
+    const words = segmentWords(s)
+    for (const { word } of words) {
+      if (isCandidate(word)) {
+        allWords.add(word.toLowerCase())
       }
     }
   }
@@ -39,15 +94,8 @@ function generateBlanks(sentences) {
 
   return sentences.map((sentence) => {
     // Extrair palavras candidatas com suas posições
-    const candidates = []
-    const regex = /[a-zA-ZÀ-ÿ']+/g
-    let match
-    while ((match = regex.exec(sentence)) !== null) {
-      const word = match[0]
-      if (word.length >= 3 && !STOP_WORDS.has(word.toLowerCase())) {
-        candidates.push({ word, index: match.index })
-      }
-    }
+    const words = segmentWords(sentence)
+    const candidates = words.filter(({ word }) => isCandidate(word))
 
     if (candidates.length === 0) {
       return null // Frase sem candidatos (muito curta)
@@ -80,10 +128,11 @@ function generateBlanks(sentences) {
     const usedSet = new Set([answerLower])
     for (const w of distractorPool) {
       if (!usedSet.has(w)) {
-        // Capitalizar como a resposta se necessário
-        const formatted = answer[0] === answer[0].toUpperCase()
-          ? w.charAt(0).toUpperCase() + w.slice(1)
-          : w
+        // Para latinas, capitalizar como a resposta se necessário
+        let formatted = w
+        if (!isCJK(w) && answer[0] === answer[0].toUpperCase()) {
+          formatted = w.charAt(0).toUpperCase() + w.slice(1)
+        }
         distractors.push(formatted)
         usedSet.add(w)
         if (distractors.length >= 3) break

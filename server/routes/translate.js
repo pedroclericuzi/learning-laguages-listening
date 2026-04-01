@@ -55,11 +55,38 @@ router.post('/word', async (req, res) => {
   }
 
   try {
-    // Traduzir a palavra (com contexto se disponível para melhor precisão)
-    const textToTranslate = context
-      ? `${word} (in the sentence: "${context}")`
-      : word
+    // ── Tradução contextual: traduzir a frase inteira para obter
+    // a tradução da palavra no contexto correto (polissemia) ───
+    let contextualTranslation = null
+    if (context && context.trim() !== word.trim()) {
+      try {
+        // Marcar a palavra-alvo na frase com delimitadores
+        // para encontrá-la na tradução
+        const contextUrl = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${from}&tl=${to}&dt=t&q=${encodeURIComponent(context)}`
+        const ctxRes = await fetch(contextUrl)
+        if (ctxRes.ok) {
+          const ctxData = await ctxRes.json()
+          // Extrair mapeamento palavra→tradução dos segmentos
+          // data[0] contém pares [tradução, original]
+          const segments = ctxData[0] || []
+          for (const seg of segments) {
+            const original = (seg[1] || '').trim()
+            const translated = (seg[0] || '').trim()
+            // Se o segmento original contém a palavra que buscamos
+            if (original && translated &&
+                original.toLowerCase().includes(word.toLowerCase()) &&
+                original.toLowerCase() !== context.toLowerCase()) {
+              contextualTranslation = translated
+              break
+            }
+          }
+        }
+      } catch {
+        // Fallback silencioso para tradução direta
+      }
+    }
 
+    // ── Tradução direta da palavra (sempre, para definições) ──
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${from}&tl=${to}&dt=t&dt=bd&q=${encodeURIComponent(word)}`
     const response = await fetch(url)
     if (!response.ok) throw new Error(`HTTP ${response.status}`)
@@ -68,7 +95,10 @@ router.post('/word', async (req, res) => {
 
     // data[0] = traduções principais [[tradução, original], ...]
     // data[1] = definições por classe gramatical (se disponível)
-    const mainTranslation = data[0]?.[0]?.[0] || word
+    const directTranslation = data[0]?.[0]?.[0] || word
+
+    // Usar tradução contextual se disponível e diferente da direta
+    const mainTranslation = contextualTranslation || directTranslation
 
     // Extrair definições por classe gramatical (substantivo, verbo, etc)
     let definitions = null

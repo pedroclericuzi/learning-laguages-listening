@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef, useCallback, memo } from 'react'
-import { createPortal } from 'react-dom'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   FiArrowLeft,
@@ -13,141 +12,12 @@ import {
   FiEdit3,
   FiCheckCircle,
   FiVolume2,
-  FiX,
 } from 'react-icons/fi'
 import { useLanguage } from '../../context/LanguageContext'
+import { useToast } from '../../components/Toast'
+import ErrorState from '../../components/ErrorState'
+import { ClickableText, WordPopup } from '../../components/WordTranslation'
 import './StoryPlayer.css'
-
-// ── Referência direta ao setter do popup (evita eventos/re-renders) ───
-let _setWordPopup = null
-
-// ── Componente de palavra clicável ─────────────────────────────────────
-const ClickableText = memo(function ClickableText({ text, lang, nativeLang, context }) {
-
-  function handleWordClick(e, word) {
-    e.stopPropagation()
-    e.preventDefault()
-
-    const cleanWord = word.replace(/[^a-zA-ZÀ-ÿ'-]/g, '')
-    if (!cleanWord || cleanWord.length < 2) return
-    if (!_setWordPopup) return
-
-    // Capturar posição ANTES de qualquer operação async
-    const rect = e.currentTarget.getBoundingClientRect()
-    let top = rect.bottom + 8
-    let left = rect.left + rect.width / 2
-    if (top + 160 > window.innerHeight) top = rect.top - 160
-    left = Math.max(150, Math.min(left, window.innerWidth - 150))
-
-    // Mostrar popup IMEDIATAMENTE com loading
-    _setWordPopup({
-      word: cleanWord,
-      translation: null, // loading
-      definitions: [],
-      top,
-      left,
-    })
-
-    // Buscar tradução em background
-    fetch('/api/translate/word', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ word: cleanWord, from: lang, to: nativeLang, context }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        // Atualizar popup com dados reais (só se ainda for a mesma palavra)
-        _setWordPopup?.((prev) => {
-          if (!prev || prev.word !== cleanWord) return prev
-          return {
-            ...prev,
-            translation: data.translation,
-            definitions: data.definitions || [],
-          }
-        })
-      })
-      .catch(() => {
-        _setWordPopup?.((prev) => {
-          if (!prev || prev.word !== cleanWord) return prev
-          return { ...prev, translation: '(erro)' }
-        })
-      })
-  }
-
-  const tokens = text.split(/(\s+)/).filter(Boolean)
-
-  return (
-    <span className="story-player__clickable-text">
-      {tokens.map((token, i) => {
-        if (/^\s+$/.test(token)) return <span key={i}>{token}</span>
-
-        const cleanToken = token.replace(/[^a-zA-ZÀ-ÿ'-]/g, '')
-        if (!/[a-zA-ZÀ-ÿ]/.test(token) || cleanToken.length < 2) {
-          return <span key={i}>{token}</span>
-        }
-
-        return (
-          <span
-            key={i}
-            className="story-player__word"
-            onClick={(e) => handleWordClick(e, token)}
-          >
-            {token}
-          </span>
-        )
-      })}
-    </span>
-  )
-})
-
-// ── Popup de tradução (independente do ciclo de re-render das linhas) ───
-function WordPopup() {
-  const [popup, setPopup] = useState(null)
-
-  // Registrar o setter para acesso direto pelo ClickableText
-  useEffect(() => {
-    _setWordPopup = setPopup
-    return () => { _setWordPopup = null }
-  }, [])
-
-  if (!popup) return null
-
-  const isLoading = popup.translation === null
-
-  return createPortal(
-    <>
-      {/* Overlay transparente – clicar fora fecha o popup */}
-      <div className="word-popup-overlay" onClick={() => setPopup(null)} />
-      <div
-        className="word-popup"
-        style={{ top: popup.top, left: popup.left }}
-      >
-        <button className="word-popup__close" onClick={() => setPopup(null)}>
-          <FiX size={12} />
-        </button>
-        <div className="word-popup__original">{popup.word}</div>
-        {isLoading ? (
-          <div className="word-popup__translation" style={{ opacity: 0.5 }}>Traduzindo...</div>
-        ) : (
-          <>
-            <div className="word-popup__translation">{popup.translation}</div>
-            {popup.definitions?.length > 0 && (
-              <div className="word-popup__defs">
-                {popup.definitions.slice(0, 2).map((def, i) => (
-                  <div key={i} className="word-popup__def">
-                    <span className="word-popup__pos">{def.partOfSpeech}</span>
-                    <span>{def.meanings.join(', ')}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </>,
-    document.body
-  )
-}
 
 export default function StoryPlayer() {
   const { id } = useParams()
@@ -156,6 +26,7 @@ export default function StoryPlayer() {
 
   const audioRef = useRef(null)
   const linesRef = useRef(null)
+  const toast = useToast()
 
   const [content, setContent] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -178,7 +49,7 @@ export default function StoryPlayer() {
   const pauseCooldownRef = useRef(0) // Timestamp até quando ignorar pausas
 
   // Buscar conteúdo com timestamps + tradução
-  useEffect(() => {
+  function loadContent() {
     setLoading(true)
     setError(null)
     setQuizAnswers({})
@@ -190,8 +61,15 @@ export default function StoryPlayer() {
         return r.json()
       })
       .then(setContent)
-      .catch((e) => setError(e.message))
+      .catch((e) => {
+        setError(e.message)
+        toast.error('Falha ao carregar o conto. Verifique sua conexão.')
+      })
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadContent()
   }, [id, targetLanguage, nativeLanguage])
 
   const lines = content?.lines || []
@@ -421,7 +299,14 @@ export default function StoryPlayer() {
       </div>
     )
   }
-  if (error) return <div className="story-player__error">{error}</div>
+  if (error) return (
+    <div className="story-player">
+      <button className="story-player__back" onClick={() => navigate(-1)}>
+        <FiArrowLeft /> Voltar
+      </button>
+      <ErrorState message={error} onRetry={loadContent} icon="📖" />
+    </div>
+  )
   if (!content) return null
 
   const progress = duration ? (currentTime / duration) * 100 : 0
@@ -442,6 +327,7 @@ export default function StoryPlayer() {
         onLoadedMetadata={handleLoadedMetadata}
         onEnded={() => setIsPlaying(false)}
         onCanPlay={() => setAudioLoading(false)}
+        onError={() => toast.error('Falha ao carregar o áudio do conto')}
         preload="auto"
       />
 

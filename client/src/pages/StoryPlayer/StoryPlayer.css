@@ -546,37 +546,3 @@
   }
 }
 
-/* ── Clickable words ─────────────────────────────────── */
-.story-player__clickable-text {
-  display: inline;
-}
-
-.story-player__word {
-  cursor: pointer;
-  border-radius: 3px;
-  transition: background 0.15s, color 0.15s;
-  padding: 0 1px;
-}
-
-.story-player__word:hover {
-  background: rgba(108, 99, 255, 0.15);
-  color: var(--color-primary);
-}
-
-.story-player__word--loading {
-  background: rgba(108, 99, 255, 0.1);
-  animation: word-pulse 0.8s ease-in-out infinite;
-}
-
-.story-player__word--active {
-  background: rgba(108, 99, 255, 0.2);
-  color: var(--color-primary);
-  font-weight: 600;
-}
-
-@keyframes word-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
-
-

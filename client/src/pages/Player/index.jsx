@@ -1,5 +1,4 @@
-import { useState, useEffect, useRef, useCallback, memo } from 'react'
-import { createPortal } from 'react-dom'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import {
   FiArrowLeft,
@@ -10,148 +9,28 @@ import {
   FiRepeat,
   FiHeart,
   FiGlobe,
-  FiX,
 } from 'react-icons/fi'
 import { useLanguage } from '../../context/LanguageContext'
 import { useFavorites } from '../../context/FavoritesContext'
+import { useSpotify } from '../../context/SpotifyContext'
+import { useToast } from '../../components/Toast'
+import ErrorState from '../../components/ErrorState'
+import { ClickableText, WordPopup } from '../../components/WordTranslation'
 import './Player.css'
-
-// ── Referência direta ao setter do popup (evita eventos/re-renders) ───
-let _setWordPopup = null
-
-// ── Componente de palavra clicável ─────────────────────────────────────
-const ClickableText = memo(function ClickableText({ text, lang, nativeLang, context }) {
-
-  function handleWordClick(e, word) {
-    e.stopPropagation()
-    e.preventDefault()
-
-    const cleanWord = word.replace(/[^a-zA-ZÀ-ÿ'-]/g, '')
-    if (!cleanWord || cleanWord.length < 2) return
-    if (!_setWordPopup) return
-
-    const rect = e.currentTarget.getBoundingClientRect()
-    let top = rect.bottom + 8
-    let left = rect.left + rect.width / 2
-    if (top + 160 > window.innerHeight) top = rect.top - 160
-    left = Math.max(150, Math.min(left, window.innerWidth - 150))
-
-    // Mostrar popup IMEDIATAMENTE com loading
-    _setWordPopup({
-      word: cleanWord,
-      translation: null,
-      definitions: [],
-      top,
-      left,
-    })
-
-    // Buscar tradução em background
-    fetch('/api/translate/word', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ word: cleanWord, from: lang, to: nativeLang, context }),
-    })
-      .then((res) => res.json())
-      .then((data) => {
-        _setWordPopup?.((prev) => {
-          if (!prev || prev.word !== cleanWord) return prev
-          return {
-            ...prev,
-            translation: data.translation,
-            definitions: data.definitions || [],
-          }
-        })
-      })
-      .catch(() => {
-        _setWordPopup?.((prev) => {
-          if (!prev || prev.word !== cleanWord) return prev
-          return { ...prev, translation: '(erro)' }
-        })
-      })
-  }
-
-  const tokens = text.split(/(\s+)/).filter(Boolean)
-
-  return (
-    <span className="player__clickable-text">
-      {tokens.map((token, i) => {
-        if (/^\s+$/.test(token)) return <span key={i}>{token}</span>
-
-        const cleanToken = token.replace(/[^a-zA-ZÀ-ÿ'-]/g, '')
-        if (!/[a-zA-ZÀ-ÿ]/.test(token) || cleanToken.length < 2) {
-          return <span key={i}>{token}</span>
-        }
-
-        return (
-          <span
-            key={i}
-            className="player__word"
-            onClick={(e) => handleWordClick(e, token)}
-          >
-            {token}
-          </span>
-        )
-      })}
-    </span>
-  )
-})
-
-// ── Popup de tradução (independente do ciclo de re-render dos versos) ───
-function WordPopup() {
-  const [popup, setPopup] = useState(null)
-
-  useEffect(() => {
-    _setWordPopup = setPopup
-    return () => { _setWordPopup = null }
-  }, [])
-
-  if (!popup) return null
-
-  const isLoading = popup.translation === null
-
-  return createPortal(
-    <>
-      <div className="word-popup-overlay" onClick={() => setPopup(null)} />
-      <div
-        className="word-popup"
-        style={{ top: popup.top, left: popup.left }}
-      >
-        <button className="word-popup__close" onClick={() => setPopup(null)}>
-          <FiX size={12} />
-        </button>
-        <div className="word-popup__original">{popup.word}</div>
-        {isLoading ? (
-          <div className="word-popup__translation" style={{ opacity: 0.5 }}>Traduzindo...</div>
-        ) : (
-          <>
-            <div className="word-popup__translation">{popup.translation}</div>
-            {popup.definitions?.length > 0 && (
-              <div className="word-popup__defs">
-                {popup.definitions.slice(0, 2).map((def, i) => (
-                  <div key={i} className="word-popup__def">
-                    <span className="word-popup__pos">{def.partOfSpeech}</span>
-                    <span>{def.meanings.join(', ')}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    </>,
-    document.body
-  )
-}
 
 export default function Player() {
   const { id } = useParams()
   const navigate = useNavigate()
   const { nativeLanguage } = useLanguage()
   const { isFavorite, toggleFavorite } = useFavorites()
+  const { isPremium, isConnected } = useSpotify()
 
   const audioRef = useRef(null)
   const lyricsRef = useRef(null)
+  const toast = useToast()
 
+  // 'preview' = 30s com sync, 'spotify' = widget completo
+  const [playerMode, setPlayerMode] = useState('preview')
   const [song, setSong] = useState(null)
   const [lyricsData, setLyricsData] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -164,8 +43,8 @@ export default function Player() {
   const [showTranslation, setShowTranslation] = useState(true)
   const [repeatIndex, setRepeatIndex] = useState(null)
 
-  // 1. Buscar dados da música (Deezer)
-  useEffect(() => {
+  // 1. Buscar dados da música (Spotify)
+  function loadSong() {
     setLoading(true)
     setError(null)
     fetch(`/api/songs/${id}`)
@@ -174,8 +53,15 @@ export default function Player() {
         return r.json()
       })
       .then(setSong)
-      .catch((e) => setError(e.message))
+      .catch((e) => {
+        setError(e.message)
+        toast.error('Falha ao carregar música. Verifique sua conexão.')
+      })
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadSong()
   }, [id])
 
   // 2. Buscar letras + tradução (LRCLIB + Google Translate)
@@ -183,9 +69,14 @@ export default function Player() {
     if (!song) return
     setLyricsLoading(true)
     fetch(`/api/songs/${id}/lyrics?translate=${nativeLanguage}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error('Letras não encontradas')
+        return r.json()
+      })
       .then(setLyricsData)
-      .catch((e) => console.error('Lyrics error:', e))
+      .catch(() => {
+        toast.warning('Não foi possível carregar as letras desta música')
+      })
       .finally(() => setLyricsLoading(false))
   }, [id, song, nativeLanguage])
 
@@ -286,7 +177,14 @@ export default function Player() {
   }
 
   if (loading) return <div className="player__loading">Carregando música...</div>
-  if (error) return <div className="player__error">{error}</div>
+  if (error) return (
+    <div className="player">
+      <button className="player__back" onClick={() => navigate(-1)}>
+        <FiArrowLeft /> Voltar
+      </button>
+      <ErrorState message={error} onRetry={loadSong} icon="🎵" />
+    </div>
+  )
   if (!song) return null
 
   const fav = isFavorite(song.id)
@@ -298,88 +196,159 @@ export default function Player() {
         <FiArrowLeft /> Voltar
       </button>
 
-      <audio
-        ref={audioRef}
-        src={song.preview}
-        onTimeUpdate={handleTimeUpdate}
-        onLoadedMetadata={handleLoadedMetadata}
-        onEnded={() => setIsPlaying(false)}
-        crossOrigin="anonymous"
-      />
-
-      {/* Card do player */}
-      <div className="player__card">
-        <img
-          className="player__cover"
-          src={song.coverBig || song.cover}
-          alt={song.title}
-          onError={(e) => {
-            e.target.src = `https://placehold.co/200x200/1a1a2e/6C63FF?text=${song.title?.[0] || '?'}`
-          }}
-        />
-        <h1 className="player__song-title">{song.title}</h1>
-        <p className="player__artist">{song.artist}</p>
-        {song.album && (
-          <p className="player__album">{song.album}</p>
-        )}
-
-        <div className="player__meta">
-          <span className="player__badge">Preview 30s</span>
-          {lyricsData?.language && (
-            <span className="player__badge">{lyricsData.language.toUpperCase()}</span>
-          )}
-          {isSynced && <span className="player__badge player__badge--synced">Sincronizado</span>}
+      {/* Seletor de modo: Preview vs Spotify Premium */}
+      {isConnected && isPremium && (
+        <div className="player__mode-toggle">
+          <button
+            className={`player__mode-btn ${playerMode === 'preview' ? 'player__mode-btn--active' : ''}`}
+            onClick={() => setPlayerMode('preview')}
+          >
+            🎵 Preview 30s (sincronizado)
+          </button>
+          <button
+            className={`player__mode-btn ${playerMode === 'spotify' ? 'player__mode-btn--active' : ''}`}
+            onClick={() => setPlayerMode('spotify')}
+          >
+            💚 Spotify Premium (completo)
+          </button>
         </div>
+      )}
 
-        {/* Barra de progresso */}
-        <div className="player__progress-wrapper">
-          <div className="player__progress" onClick={seekTo}>
-            <div
-              className="player__progress-fill"
-              style={{ width: `${progress}%` }}
+      {playerMode === 'preview' ? (
+        /* ── Player 30s Preview (com sync de letras) ── */
+        <>
+          <audio
+            ref={audioRef}
+            src={song.preview}
+            onTimeUpdate={handleTimeUpdate}
+            onLoadedMetadata={handleLoadedMetadata}
+            onEnded={() => setIsPlaying(false)}
+            onError={() => toast.error('Áudio indisponível para esta música')}
+            crossOrigin="anonymous"
+          />
+
+          <div className="player__card">
+            <img
+              className="player__cover"
+              src={song.coverBig || song.cover}
+              alt={song.title}
+              onError={(e) => {
+                e.target.src = `https://placehold.co/200x200/1a1a2e/6C63FF?text=${song.title?.[0] || '?'}`
+              }}
+            />
+            <h1 className="player__song-title">{song.title}</h1>
+            <p className="player__artist">{song.artist}</p>
+            {song.album && (
+              <p className="player__album">{song.album}</p>
+            )}
+
+            <div className="player__meta">
+              <span className="player__badge">Preview 30s</span>
+              {lyricsData?.language && (
+                <span className="player__badge">{lyricsData.language.toUpperCase()}</span>
+              )}
+              {isSynced && <span className="player__badge player__badge--synced">Sincronizado</span>}
+            </div>
+
+            <div className="player__progress-wrapper">
+              <div className="player__progress" onClick={seekTo}>
+                <div
+                  className="player__progress-fill"
+                  style={{ width: `${progress}%` }}
+                />
+              </div>
+            </div>
+            <div className="player__time">
+              <span>{formatTime(currentTime)}</span>
+              <span>{formatTime(duration)}</span>
+            </div>
+
+            <div className="player__controls">
+              <button
+                className={`player__ctrl-btn player__fav-btn ${fav ? 'player__fav-btn--active' : ''}`}
+                onClick={() => toggleFavorite(song.id)}
+              >
+                <FiHeart fill={fav ? 'currentColor' : 'none'} />
+              </button>
+              <button className="player__ctrl-btn" onClick={skipBackward}>
+                <FiSkipBack />
+              </button>
+              <button className="player__play-btn" onClick={togglePlay}>
+                {isPlaying ? <FiPause /> : <FiPlay />}
+              </button>
+              <button className="player__ctrl-btn" onClick={skipForward}>
+                <FiSkipForward />
+              </button>
+              {isSynced && (
+                <button
+                  className="player__ctrl-btn"
+                  onClick={() => setRepeatIndex(null)}
+                  style={{ color: repeatIndex !== null ? 'var(--color-accent)' : undefined }}
+                  title={repeatIndex !== null ? 'Parar repetição' : 'Toque em um verso para repetir'}
+                >
+                  <FiRepeat />
+                </button>
+              )}
+            </div>
+
+            {!song.preview && (
+              <p className="player__no-preview">
+                Preview de áudio indisponível para esta música
+              </p>
+            )}
+          </div>
+        </>
+      ) : (
+        /* ── Player Spotify Premium (embed completo) ── */
+        <div className="player__card">
+          <img
+            className="player__cover"
+            src={song.coverBig || song.cover}
+            alt={song.title}
+            onError={(e) => {
+              e.target.src = `https://placehold.co/200x200/1a1a2e/1DB954?text=${song.title?.[0] || '?'}`
+            }}
+          />
+          <h1 className="player__song-title">{song.title}</h1>
+          <p className="player__artist">{song.artist}</p>
+          {song.album && (
+            <p className="player__album">{song.album}</p>
+          )}
+
+          <div className="player__meta">
+            <span className="player__badge player__badge--premium">💚 Premium</span>
+            {lyricsData?.language && (
+              <span className="player__badge">{lyricsData.language.toUpperCase()}</span>
+            )}
+          </div>
+
+          <div className="player__spotify-widget">
+            <iframe
+              title="Spotify Player"
+              src={`https://open.spotify.com/embed/track/${song.id}?utm_source=generator&theme=0`}
+              width="100%"
+              height="152"
+              frameBorder="0"
+              allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"
+              loading="lazy"
+              style={{ borderRadius: '12px', border: 'none' }}
             />
           </div>
-        </div>
-        <div className="player__time">
-          <span>{formatTime(currentTime)}</span>
-          <span>{formatTime(duration)}</span>
-        </div>
 
-        {/* Controles */}
-        <div className="player__controls">
-          <button
-            className={`player__ctrl-btn player__fav-btn ${fav ? 'player__fav-btn--active' : ''}`}
-            onClick={() => toggleFavorite(song.id)}
-          >
-            <FiHeart fill={fav ? 'currentColor' : 'none'} />
-          </button>
-          <button className="player__ctrl-btn" onClick={skipBackward}>
-            <FiSkipBack />
-          </button>
-          <button className="player__play-btn" onClick={togglePlay}>
-            {isPlaying ? <FiPause /> : <FiPlay />}
-          </button>
-          <button className="player__ctrl-btn" onClick={skipForward}>
-            <FiSkipForward />
-          </button>
-          {isSynced && (
-            <button
-              className="player__ctrl-btn"
-              onClick={() => setRepeatIndex(null)}
-              style={{ color: repeatIndex !== null ? 'var(--color-accent)' : undefined }}
-              title={repeatIndex !== null ? 'Parar repetição' : 'Toque em um verso para repetir'}
-            >
-              <FiRepeat />
-            </button>
-          )}
-        </div>
-
-        {!song.preview && (
-          <p className="player__no-preview">
-            Preview de áudio indisponível para esta música
+          <p className="player__spotify-hint">
+            Música completa via Spotify. Faça login no widget se necessário.
           </p>
-        )}
-      </div>
+
+          <div className="player__controls">
+            <button
+              className={`player__ctrl-btn player__fav-btn ${fav ? 'player__fav-btn--active' : ''}`}
+              onClick={() => toggleFavorite(song.id)}
+            >
+              <FiHeart fill={fav ? 'currentColor' : 'none'} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Seção de letras */}
       <div className="player__lyrics-section">

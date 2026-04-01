@@ -339,37 +339,58 @@
   }
 }
 
-/* ── Clickable words ─────────────────────────────────── */
-.player__clickable-text {
-  display: inline;
+/* ── Mode toggle (Preview vs Deezer) ─────────────────────── */
+.player__mode-toggle {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  background: var(--color-bg-card);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 0.25rem;
 }
 
-.player__word {
-  cursor: pointer;
-  border-radius: 3px;
-  transition: background 0.15s, color 0.15s;
-  padding: 0 1px;
-}
-
-.player__word:hover {
-  background: rgba(108, 99, 255, 0.15);
-  color: var(--color-primary);
-}
-
-.player__word--loading {
-  background: rgba(108, 99, 255, 0.1);
-  animation: word-pulse 0.8s ease-in-out infinite;
-}
-
-.player__word--active {
-  background: rgba(108, 99, 255, 0.2);
-  color: var(--color-primary);
+.player__mode-btn {
+  flex: 1;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.75rem;
   font-weight: 600;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text-secondary);
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
 }
 
-@keyframes word-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
+.player__mode-btn--active {
+  background: var(--color-primary);
+  color: #fff;
+}
+
+.player__mode-btn:not(.player__mode-btn--active):hover {
+  color: var(--color-text);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+/* ── Spotify widget ────────────────────────────────────────── */
+.player__spotify-widget {
+  margin: 1.25rem 0;
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.player__spotify-hint {
+  font-size: 0.75rem;
+  color: var(--color-text-muted);
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.player__badge--premium {
+  background: rgba(29, 185, 84, 0.15);
+  color: #1DB954;
 }
 
 

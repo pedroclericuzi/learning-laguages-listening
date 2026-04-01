@@ -17,7 +17,11 @@ export default function StoryCard({ story }) {
       className="story-card"
       onClick={() => navigate(`/story/${story.id}`)}
     >
-      <div className="story-card__emoji">{story.emoji}</div>
+      <div className="story-card__emoji">
+        {[...new Intl.Segmenter('en', { granularity: 'grapheme' }).segment(story.emoji)].map((seg, i) => (
+          <span key={i}>{seg.segment}</span>
+        ))}
+      </div>
       <div className="story-card__info">
         <div className="story-card__title">{story.title}</div>
         <div className="story-card__author">{story.author}</div>

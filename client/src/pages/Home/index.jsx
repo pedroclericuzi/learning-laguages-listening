@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FiSearch } from 'react-icons/fi'
+import { FiSearch, FiAlertTriangle, FiRefreshCw } from 'react-icons/fi'
 import { useLanguage } from '../../context/LanguageContext'
+import { useToast } from '../../components/Toast'
 import SongCard from '../../components/SongCard'
 import StoryCard from '../../components/StoryCard'
 import './Home.css'
@@ -17,32 +18,69 @@ const languageLabels = {
   ko: { flag: '🇰🇷', name: 'Coreano' },
 }
 
+/** Aviso inline para seções que falharam */
+function SectionWarning({ message, onRetry }) {
+  return (
+    <div className="home__section-warning">
+      <FiAlertTriangle className="home__section-warning-icon" />
+      <span>{message}</span>
+      {onRetry && (
+        <button className="home__section-warning-btn" onClick={onRetry}>
+          <FiRefreshCw size={14} /> Tentar novamente
+        </button>
+      )}
+    </div>
+  )
+}
+
 export default function Home() {
   const navigate = useNavigate()
   const { targetLanguage } = useLanguage()
-  const [popular, setPopular] = useState([])
+  const toast = useToast()
+
+  // Estado independente por seção
   const [langSongs, setLangSongs] = useState([])
   const [stories, setStories] = useState([])
   const [searchResults, setSearchResults] = useState(null)
   const [search, setSearch] = useState('')
-  const [loading, setLoading] = useState(true)
   const [searching, setSearching] = useState(false)
 
-  // Carregar populares + músicas do idioma alvo + contos
-  useEffect(() => {
-    setLoading(true)
-    Promise.all([
-      fetch('/api/songs/popular?limit=8').then((r) => r.json()),
-      fetch(`/api/songs/language/${targetLanguage}`).then((r) => r.json()),
-      fetch(`/api/stories?lang=${targetLanguage}`).then((r) => r.json()),
-    ])
-      .then(([popularData, langData, storiesData]) => {
-        setPopular(popularData)
-        setLangSongs(langData)
-        setStories(storiesData)
+  const [loadingStories, setLoadingStories] = useState(true)
+  const [loadingSongs, setLoadingSongs] = useState(true)
+  const [errorStories, setErrorStories] = useState(null)
+  const [errorSongs, setErrorSongs] = useState(null)
+
+  // Carregar contos (independente)
+  function loadStories() {
+    setLoadingStories(true)
+    setErrorStories(null)
+    fetch(`/api/stories?lang=${targetLanguage}`)
+      .then((r) => {
+        if (!r.ok) throw new Error('Erro ao carregar contos')
+        return r.json()
       })
-      .catch(console.error)
-      .finally(() => setLoading(false))
+      .then(setStories)
+      .catch((e) => setErrorStories(e.message))
+      .finally(() => setLoadingStories(false))
+  }
+
+  // Carregar músicas por idioma (independente)
+  function loadSongs() {
+    setLoadingSongs(true)
+    setErrorSongs(null)
+    fetch(`/api/songs/language/${targetLanguage}`)
+      .then((r) => {
+        if (!r.ok) throw new Error('Erro ao buscar músicas')
+        return r.json()
+      })
+      .then(setLangSongs)
+      .catch((e) => setErrorSongs(e.message))
+      .finally(() => setLoadingSongs(false))
+  }
+
+  useEffect(() => {
+    loadStories()
+    loadSongs()
   }, [targetLanguage])
 
   // Busca com debounce
@@ -54,10 +92,12 @@ export default function Home() {
     setSearching(true)
     try {
       const res = await fetch(`/api/songs/search?q=${encodeURIComponent(term)}`)
+      if (!res.ok) throw new Error('Erro na busca')
       const data = await res.json()
       setSearchResults(data)
     } catch (e) {
-      console.error('Search error:', e)
+      toast.error('Erro ao buscar músicas. Tente novamente.')
+      setSearchResults([])
     } finally {
       setSearching(false)
     }
@@ -127,8 +167,13 @@ export default function Home() {
               </span>
             </div>
             <div className="home__songs-grid">
-              {loading ? (
-                <div className="home__empty">Carregando...</div>
+              {loadingStories ? (
+                <div className="home__empty">Carregando contos...</div>
+              ) : errorStories ? (
+                <SectionWarning
+                  message="Não foi possível carregar os contos."
+                  onRetry={loadStories}
+                />
               ) : stories.length > 0 ? (
                 stories.slice(0, 4).map((story) => (
                   <StoryCard key={story.id} story={story} />
@@ -153,8 +198,13 @@ export default function Home() {
               </span>
             </div>
             <div className="home__songs-grid">
-              {loading ? (
-                <div className="home__empty">Carregando...</div>
+              {loadingSongs ? (
+                <div className="home__empty">Carregando músicas...</div>
+              ) : errorSongs ? (
+                <SectionWarning
+                  message="Não foi possível carregar as músicas."
+                  onRetry={loadSongs}
+                />
               ) : langSongs.length > 0 ? (
                 langSongs.slice(0, 5).map((song) => (
                   <SongCard key={song.id} song={song} />
@@ -165,29 +215,6 @@ export default function Home() {
             </div>
           </section>
 
-          {/* Populares globais */}
-          <section className="home__section">
-            <div className="home__section-header">
-              <h2 className="home__section-title">🔥 Populares no mundo</h2>
-              <span
-                className="home__section-link"
-                onClick={() => navigate('/songs')}
-              >
-                Ver todas →
-              </span>
-            </div>
-            <div className="home__songs-grid">
-              {loading ? (
-                <div className="home__empty">Carregando...</div>
-              ) : popular.length > 0 ? (
-                popular.map((song) => (
-                  <SongCard key={song.id} song={song} />
-                ))
-              ) : (
-                <div className="home__empty">Nenhuma música encontrada</div>
-              )}
-            </div>
-          </section>
         </>
       )}
     </div>

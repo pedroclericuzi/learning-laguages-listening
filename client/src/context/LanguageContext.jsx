@@ -4,19 +4,18 @@ const LanguageContext = createContext(null)
 
 const STORAGE_KEY = '3l-languages'
 
-export function LanguageProvider({ children }) {
-  const [nativeLanguage, setNativeLanguage] = useState(null)
-  const [targetLanguage, setTargetLanguage] = useState(null)
-
-  // Carregar do localStorage
-  useEffect(() => {
+function loadSaved() {
+  try {
     const saved = localStorage.getItem(STORAGE_KEY)
-    if (saved) {
-      const { native, target } = JSON.parse(saved)
-      setNativeLanguage(native)
-      setTargetLanguage(target)
-    }
-  }, [])
+    if (saved) return JSON.parse(saved)
+  } catch { /* ignore */ }
+  return { native: null, target: null }
+}
+
+export function LanguageProvider({ children }) {
+  const saved = loadSaved()
+  const [nativeLanguage, setNativeLanguage] = useState(saved.native)
+  const [targetLanguage, setTargetLanguage] = useState(saved.target)
 
   // Salvar no localStorage
   useEffect(() => {

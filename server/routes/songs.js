@@ -1,11 +1,11 @@
 import { Router } from 'express'
-import { searchSongs, getTrack, getChart, getLanguageSongs } from '../services/deezer.js'
+import { searchSongs, getTrack, getChart, getLanguageSongs } from '../services/spotify.js'
 import { getLyrics } from '../services/lrclib.js'
 import { translateLyrics, detectLanguage } from '../services/translator.js'
 
 const router = Router()
 
-// ── Buscar músicas (Deezer search) ───────────────────────────
+// ── Buscar músicas (Spotify search) ──────────────────────────
 router.get('/search', async (req, res) => {
   try {
     const { q, limit } = req.query
@@ -19,7 +19,7 @@ router.get('/search', async (req, res) => {
   }
 })
 
-// ── Músicas populares (Deezer chart) ─────────────────────────
+// ── Músicas populares (Spotify chart) ────────────────────────
 router.get('/popular', async (req, res) => {
   try {
     const limit = Number(req.query.limit) || 20
@@ -42,7 +42,7 @@ router.get('/language/:code', async (req, res) => {
   }
 })
 
-// ── Detalhes de uma música (Deezer track) ────────────────────
+// ── Detalhes de uma música (Spotify track) ───────────────────
 router.get('/:id', async (req, res) => {
   try {
     const track = await getTrack(req.params.id)
@@ -58,7 +58,7 @@ router.get('/:id/lyrics', async (req, res) => {
   try {
     const { translate: targetLang } = req.query
 
-    // 1. Buscar info da música no Deezer
+    // 1. Buscar info da música no Spotify
     const track = await getTrack(req.params.id)
 
     // 2. Buscar letras no LRCLIB

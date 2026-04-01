@@ -1,21 +1,36 @@
 import { useState, useEffect } from 'react'
 import { useLanguage } from '../../context/LanguageContext'
+import { useToast } from '../../components/Toast'
 import StoryCard from '../../components/StoryCard'
+import ErrorState from '../../components/ErrorState'
 import './Stories.css'
 
 export default function Stories() {
   const { targetLanguage } = useLanguage()
+  const toast = useToast()
   const [stories, setStories] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [filter, setFilter] = useState('all')
 
-  useEffect(() => {
+  function loadStories() {
     setLoading(true)
+    setError(null)
     fetch(`/api/stories?lang=${targetLanguage}`)
-      .then((r) => r.json())
+      .then((r) => {
+        if (!r.ok) throw new Error('Erro ao carregar contos')
+        return r.json()
+      })
       .then(setStories)
-      .catch(console.error)
+      .catch((e) => {
+        setError(e.message)
+        toast.error('Falha ao carregar contos. Verifique sua conexão.')
+      })
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadStories()
   }, [targetLanguage])
 
   const filtered =
@@ -54,6 +69,8 @@ export default function Stories() {
       <div className="stories__grid">
         {loading ? (
           <div className="stories__empty">Carregando contos...</div>
+        ) : error ? (
+          <ErrorState message={error} onRetry={loadStories} icon="📖" />
         ) : filtered.length > 0 ? (
           filtered.map((story) => (
             <StoryCard key={story.id} story={story} />

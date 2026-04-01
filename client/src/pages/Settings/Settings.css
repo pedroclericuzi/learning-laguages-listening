@@ -71,3 +71,55 @@
   font-size: 0.75rem;
   margin-top: 2rem;
 }
+
+/* Spotify section */
+.settings__spotify-avatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  margin-right: 0.5rem;
+  vertical-align: middle;
+}
+
+.settings__item-value--premium {
+  color: #1DB954;
+}
+
+.settings__spotify-info {
+  font-size: 0.8rem;
+  color: var(--color-text-secondary);
+  padding: 0.5rem 0;
+  line-height: 1.4;
+}
+
+.settings__spotify-btn {
+  width: 100%;
+  padding: 0.75rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  border: 1px solid;
+  margin-top: 0.75rem;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+
+.settings__spotify-btn--connect {
+  background: rgba(29, 185, 84, 0.1);
+  color: #1DB954;
+  border-color: rgba(29, 185, 84, 0.2);
+}
+
+.settings__spotify-btn--connect:hover {
+  background: rgba(29, 185, 84, 0.2);
+}
+
+.settings__spotify-btn--disconnect {
+  background: rgba(255, 107, 107, 0.1);
+  color: var(--color-secondary);
+  border-color: rgba(255, 107, 107, 0.2);
+}
+
+.settings__spotify-btn--disconnect:hover {
+  background: rgba(255, 107, 107, 0.2);
+}

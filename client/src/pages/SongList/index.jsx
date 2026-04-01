@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { FiSearch } from 'react-icons/fi'
 import { useLanguage } from '../../context/LanguageContext'
+import { useToast } from '../../components/Toast'
 import SongCard from '../../components/SongCard'
+import ErrorState from '../../components/ErrorState'
 import './SongList.css'
 
 const suggestions = [
@@ -13,13 +15,16 @@ const suggestions = [
 export default function SongList() {
   const [searchParams] = useSearchParams()
   const { targetLanguage } = useLanguage()
+  const toast = useToast()
   const [songs, setSongs] = useState([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(null)
   const [search, setSearch] = useState(searchParams.get('q') || '')
   const langParam = searchParams.get('lang')
 
   const fetchSongs = useCallback(async (query) => {
     setLoading(true)
+    setError(null)
     try {
       let url
       if (query?.trim()) {
@@ -30,14 +35,16 @@ export default function SongList() {
         url = '/api/songs/popular?limit=30'
       }
       const res = await fetch(url)
+      if (!res.ok) throw new Error('Erro ao buscar músicas')
       const data = await res.json()
       setSongs(data)
     } catch (e) {
-      console.error('Error fetching songs:', e)
+      setError(e.message)
+      toast.error('Falha ao carregar músicas. Verifique sua conexão.')
     } finally {
       setLoading(false)
     }
-  }, [langParam])
+  }, [langParam, toast])
 
   // Busca com debounce
   useEffect(() => {
@@ -83,7 +90,9 @@ export default function SongList() {
       </p>
 
       <div className="song-list__grid">
-        {!loading && songs.length === 0 ? (
+        {!loading && error ? (
+          <ErrorState message={error} onRetry={() => fetchSongs(search)} icon="🎵" />
+        ) : !loading && songs.length === 0 ? (
           <div className="song-list__empty">
             Nenhuma música encontrada. Tente outra busca.
           </div>
