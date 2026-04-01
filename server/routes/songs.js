@@ -2,6 +2,7 @@ import { Router } from 'express'
 import { searchSongs, getTrack, getChart, getLanguageSongs } from '../services/spotify.js'
 import { getLyrics } from '../services/lrclib.js'
 import { translateLyrics, detectLanguage } from '../services/translator.js'
+import { generateBlanks } from '../services/blanks.js'
 
 const router = Router()
 
@@ -82,11 +83,18 @@ router.get('/:id/lyrics', async (req, res) => {
       translatedLines = await translateLyrics(lyrics.lines, detectedLang, targetLang)
     }
 
+    // 5. Gerar blanks (fill-in-the-blank) apenas em letras sincronizadas
+    let finalLines = translatedLines
+    if (lyrics.synced) {
+      const blanks = generateBlanks(translatedLines.map((l) => l.text))
+      finalLines = translatedLines.map((l, i) => ({ ...l, blank: blanks[i] || null }))
+    }
+
     res.json({
       track: { id: track.id, title: track.title, artist: track.artist },
       synced: lyrics.synced,
       language: detectedLang,
-      lines: translatedLines,
+      lines: finalLines,
     })
   } catch (e) {
     console.error('Lyrics error:', e.message)

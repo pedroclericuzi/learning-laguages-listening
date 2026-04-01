@@ -9,9 +9,13 @@ import {
   FiRepeat,
   FiHeart,
   FiGlobe,
+  FiEdit3,
+  FiCheckCircle,
+  FiVolume2,
 } from 'react-icons/fi'
 import { useLanguage } from '../../context/LanguageContext'
 import { useFavorites } from '../../context/FavoritesContext'
+import { useReport } from '../../context/ReportContext'
 import { useToast } from '../../components/Toast'
 import ErrorState from '../../components/ErrorState'
 import { ClickableText, WordPopup } from '../../components/WordTranslation'
@@ -22,6 +26,7 @@ export default function Player() {
   const navigate = useNavigate()
   const { nativeLanguage } = useLanguage()
   const { isFavorite, toggleFavorite } = useFavorites()
+  const { saveSongResult } = useReport()
 
   const audioRef = useRef(null)
   const lyricsRef = useRef(null)
@@ -41,6 +46,19 @@ export default function Player() {
   const [showTranslation, setShowTranslation] = useState(true)
   const [repeatIndex, setRepeatIndex] = useState(null)
 
+  // Quiz state
+  const [quizAnswers, setQuizAnswers] = useState({})
+  const [quizMode, setQuizMode] = useState(true)
+  const [quizPaused, setQuizPaused] = useState(false)
+  const wasPlayingRef = useRef(false)
+  const pauseCooldownRef = useRef(0)
+  const pendingQuizEndTimes = useRef([])
+
+  // Refs para salvar no unmount
+  const quizAnswersRef = useRef({})
+  const quizTotalRef = useRef(0)
+  const songTitleRef = useRef('')
+
   // 1. Buscar dados da música (Spotify)
   function loadSong() {
     setLoading(true)
@@ -50,7 +68,10 @@ export default function Player() {
         if (!r.ok) throw new Error('Música não encontrada')
         return r.json()
       })
-      .then(setSong)
+      .then((data) => {
+        setSong(data)
+        songTitleRef.current = data?.title || ''
+      })
       .catch((e) => {
         setError(e.message)
         toast.error('Falha ao carregar música. Verifique sua conexão.')
@@ -62,6 +83,18 @@ export default function Player() {
     loadSong()
   }, [id])
 
+  // Salvar resultado do quiz ao sair
+  useEffect(() => {
+    return () => {
+      const answers = quizAnswersRef.current
+      const answered = Object.keys(answers).length
+      const correct = Object.values(answers).filter((a) => a.correct).length
+      if (answered > 0) {
+        saveSongResult(id, songTitleRef.current || id, correct, answered)
+      }
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
   // 2. Buscar letras + tradução (LRCLIB + Google Translate)
   useEffect(() => {
     if (!song) return
@@ -71,7 +104,12 @@ export default function Player() {
         if (!r.ok) throw new Error('Letras não encontradas')
         return r.json()
       })
-      .then(setLyricsData)
+      .then((data) => {
+        setLyricsData(data)
+        const total = (data?.lines || []).filter((l) => l.blank).length
+        quizTotalRef.current = total
+        setQuizAnswers({})
+      })
       .catch(() => {
         toast.warning('Não foi possível carregar as letras desta música')
       })
@@ -111,6 +149,54 @@ export default function Player() {
       }
     }
   }, [currentTime, repeatIndex, lyrics, isSynced])
+
+  // Manter ref sincronizado para save-on-unmount
+  useEffect(() => { quizAnswersRef.current = quizAnswers }, [quizAnswers])
+
+  // Lista de linhas pendentes de quiz (para deterção de pausa)
+  useEffect(() => {
+    if (!quizMode || !lyrics.length || !isSynced) {
+      pendingQuizEndTimes.current = []
+      return
+    }
+    pendingQuizEndTimes.current = lyrics
+      .map((l, i) => ({ index: i, end: l.end, hasBlank: !!l.blank }))
+      .filter((item) => item.hasBlank && !quizAnswers[item.index]?.answered)
+  }, [lyrics, quizMode, quizAnswers, isSynced])
+
+  // Pausar no final da frase para o quiz (apenas modo preview)
+  useEffect(() => {
+    if (!quizMode || !audioRef.current || !lyrics.length || quizPaused) return
+    if (playerMode !== 'preview') return
+    if (Date.now() < pauseCooldownRef.current) return
+
+    const pending = pendingQuizEndTimes.current
+    for (const item of pending) {
+      if (currentTime >= item.end - 0.05 && currentTime <= item.end + 0.5) {
+        audioRef.current.pause()
+        audioRef.current.currentTime = item.end
+        wasPlayingRef.current = true
+        setIsPlaying(false)
+        setQuizPaused(true)
+        setActiveLyricIndex(item.index)
+        break
+      }
+    }
+  }, [currentTime, lyrics, quizMode, quizPaused, playerMode])
+
+  // RAF polling preciso para detecção da pausa do quiz
+  useEffect(() => {
+    if (!quizMode || !isPlaying || playerMode !== 'preview') return
+    let rafId
+    function tick() {
+      if (audioRef.current && !audioRef.current.paused) {
+        setCurrentTime(audioRef.current.currentTime)
+      }
+      rafId = requestAnimationFrame(tick)
+    }
+    rafId = requestAnimationFrame(tick)
+    return () => cancelAnimationFrame(rafId)
+  }, [quizMode, isPlaying, playerMode])
 
   const handleTimeUpdate = useCallback(() => {
     if (audioRef.current) {
@@ -173,6 +259,45 @@ export default function Player() {
     const s = Math.floor(seconds % 60)
     return `${m}:${s.toString().padStart(2, '0')}`
   }
+
+  function handleQuizAnswer(lineIndex, selected) {
+    if (quizAnswers[lineIndex]?.answered) return
+    const blank = lyrics[lineIndex]?.blank
+    if (!blank) return
+
+    const correct = selected === blank.answer
+    setQuizAnswers((prev) => ({
+      ...prev,
+      [lineIndex]: { answered: true, correct, selected },
+    }))
+
+    if (quizPaused && audioRef.current) {
+      setTimeout(() => {
+        pauseCooldownRef.current = Date.now() + 500
+        setQuizPaused(false)
+        if (wasPlayingRef.current) {
+          audioRef.current.play()
+          setIsPlaying(true)
+          wasPlayingRef.current = false
+        }
+      }, 800)
+    }
+  }
+
+  function replayLyric(e, index) {
+    e.stopPropagation()
+    if (!audioRef.current || !lyrics[index]) return
+    pauseCooldownRef.current = Date.now() + 500
+    setQuizPaused(false)
+    wasPlayingRef.current = true
+    audioRef.current.currentTime = lyrics[index].start
+    audioRef.current.play()
+    setIsPlaying(true)
+  }
+
+  const quizTotal = lyrics.filter((l) => l.blank).length
+  const quizAnswered = Object.keys(quizAnswers).length
+  const quizCorrect = Object.values(quizAnswers).filter((a) => a.correct).length
 
   if (loading) return <div className="player__loading">Carregando música...</div>
   if (error) return (
@@ -352,14 +477,49 @@ export default function Player() {
       <div className="player__lyrics-section">
         <div className="player__lyrics-header">
           <h2 className="player__lyrics-title">📝 Letra</h2>
-          <button
-            className={`player__translation-toggle ${showTranslation ? 'player__translation-toggle--active' : ''}`}
-            onClick={() => setShowTranslation(!showTranslation)}
-          >
-            <FiGlobe />
-            {showTranslation ? 'Tradução ON' : 'Tradução OFF'}
-          </button>
+          <div className="player__lyrics-actions">
+            {isSynced && (
+              <button
+                className={`player__translation-toggle ${quizMode ? 'player__translation-toggle--active' : ''}`}
+                onClick={() => {
+                  const next = !quizMode
+                  setQuizMode(next)
+                  if (!next && quizPaused && audioRef.current) {
+                    setQuizPaused(false)
+                    if (wasPlayingRef.current) {
+                      audioRef.current.play()
+                      setIsPlaying(true)
+                      wasPlayingRef.current = false
+                    }
+                  }
+                }}
+              >
+                <FiEdit3 />
+                {quizMode ? 'Quiz ON' : 'Quiz OFF'}
+              </button>
+            )}
+            <button
+              className={`player__translation-toggle ${showTranslation ? 'player__translation-toggle--active' : ''}`}
+              onClick={() => setShowTranslation(!showTranslation)}
+            >
+              <FiGlobe />
+              {showTranslation ? 'Tradução ON' : 'Tradução OFF'}
+            </button>
+          </div>
         </div>
+
+        {/* Score do quiz */}
+        {isSynced && quizMode && quizAnswered > 0 && (
+          <div className="player__quiz-score">
+            <FiCheckCircle />
+            <span>{quizCorrect}/{quizAnswered} corretas</span>
+            {quizAnswered === quizTotal && quizTotal > 0 && (
+              <span className="player__quiz-final">
+                — {Math.round((quizCorrect / quizTotal) * 100)}% de acerto!
+              </span>
+            )}
+          </div>
+        )}
 
         {lyricsLoading ? (
           <div className="player__lyrics-loading">
@@ -373,31 +533,78 @@ export default function Player() {
               const isPast =
                 isSynced && activeLyricIndex >= 0 && index < activeLyricIndex
               const isRepeating = repeatIndex === index
+              const blank = lyric.blank
+              const quiz = quizAnswers[index]
+              const showBlank = quizMode && isSynced && blank && !quiz?.answered
+              const showResult = quizMode && isSynced && blank && quiz?.answered
+              const isWaiting = isActive && quizPaused && showBlank
 
               return (
                 <div
                   key={index}
-                  className={`player__lyric-line ${isActive ? 'player__lyric-line--active' : ''} ${isPast ? 'player__lyric-line--past' : ''} ${isSynced ? 'player__lyric-line--clickable' : ''}`}
+                  className={`player__lyric-line ${isActive ? 'player__lyric-line--active' : ''} ${isPast ? 'player__lyric-line--past' : ''} ${isSynced ? 'player__lyric-line--clickable' : ''} ${isWaiting ? 'player__lyric-line--waiting' : ''}`}
                   onClick={() => handleLyricClick(index)}
                 >
-                  <p className="player__lyric-text">
-                    <ClickableText
-                      text={lyric.text}
-                      lang={lyricsData?.language || 'en'}
-                      nativeLang={nativeLanguage}
-                      context={lyric.text}
-                    />
-                  </p>
-                  {showTranslation && lyric.translation && (
-                    <p className="player__lyric-translation">
-                      {lyric.translation}
+                  {isSynced && (
+                    <button
+                      className="player__replay-btn"
+                      onClick={(e) => replayLyric(e, index)}
+                      title="Ouvir novamente"
+                    >
+                      <FiVolume2 size={13} />
+                    </button>
+                  )}
+                  <div className="player__lyric-body">
+                    <p className="player__lyric-text">
+                      <ClickableText
+                        text={showBlank ? blank.blankedText : lyric.text}
+                        lang={lyricsData?.language || 'en'}
+                        nativeLang={nativeLanguage}
+                        context={lyric.text}
+                      />
+                      {showResult && (
+                        <span className={`player__quiz-inline ${quiz.correct ? 'player__quiz-inline--correct' : 'player__quiz-inline--wrong'}`}>
+                          {quiz.correct ? ' ✓' : ` ✗ → ${blank.answer}`}
+                        </span>
+                      )}
                     </p>
-                  )}
-                  {isRepeating && (
-                    <span className="player__repeat-badge">
-                      <FiRepeat size={10} /> Repetindo
-                    </span>
-                  )}
+
+                    {showBlank && (
+                      <div className="player__quiz-options">
+                        {blank.options.map((option) => (
+                          <button
+                            key={option}
+                            className="player__quiz-btn"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleQuizAnswer(index, option)
+                            }}
+                          >
+                            {option}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {showResult && (
+                      <div className={`player__quiz-result ${quiz.correct ? 'player__quiz-result--correct' : 'player__quiz-result--wrong'}`}>
+                        {quiz.correct
+                          ? '✓ Correto!'
+                          : `✗ Você escolheu "${quiz.selected}" — resposta: "${blank.answer}"`}
+                      </div>
+                    )}
+
+                    {showTranslation && lyric.translation && (
+                      <p className="player__lyric-translation">
+                        {lyric.translation}
+                      </p>
+                    )}
+                    {isRepeating && (
+                      <span className="player__repeat-badge">
+                        <FiRepeat size={10} /> Repetindo
+                      </span>
+                    )}
+                  </div>
                 </div>
               )
             })}
