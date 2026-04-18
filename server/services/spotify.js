@@ -53,13 +53,30 @@ async function spotifyFetch(endpoint) {
 // Spotify Client Credentials limita a 10 resultados por request
 const SPOTIFY_MAX_LIMIT = 10
 
+// Mapeamento língua → mercado Spotify (filtra resultados disponíveis no país)
+const LANG_TO_MARKET = {
+  en: 'US',
+  es: 'ES',
+  fr: 'FR',
+  pt: 'BR',
+  de: 'DE',
+  it: 'IT',
+  ja: 'JP',
+  ko: 'KR',
+}
+
 /**
  * Buscar músicas no Spotify
+ * @param {string} query
+ * @param {number} limit
+ * @param {string} [lang] - código de idioma (en, es, fr…) para filtrar por mercado
  */
-export async function searchSongs(query, limit = 10) {
+export async function searchSongs(query, limit = 10, lang) {
   const safeLimit = Math.min(limit, SPOTIFY_MAX_LIMIT)
+  const market = lang ? LANG_TO_MARKET[lang] : undefined
+  const marketParam = market ? `&market=${market}` : ''
   const data = await spotifyFetch(
-    `/search?q=${encodeURIComponent(query)}&type=track&limit=${safeLimit}`
+    `/search?q=${encodeURIComponent(query)}&type=track&limit=${safeLimit}${marketParam}`
   )
   return (data.tracks?.items || []).map(formatTrack)
 }
